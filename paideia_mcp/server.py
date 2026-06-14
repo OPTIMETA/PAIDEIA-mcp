@@ -26,7 +26,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import GetPromptResult, Prompt, PromptArgument, PromptMessage, Resource, TextContent, Tool
 
 from .action import list_paideia_actions, prepare_paideia_action
-from .alt_manifest import alt_system_prompt, build_alt_manifest
+from .alt_manifest import ALT_TOOL_NAMESPACE, alt_system_prompt, build_alt_manifest
+from .alt_setup import alt_setup_instructions
 from .analyze import build_course_index
 from .doctor import paideia_doctor
 from .exam_radar import import_exam_radar, parse_exam_radar_export
@@ -546,6 +547,49 @@ _PAIDEIA_DOCTOR_SCHEMA: dict[str, Any] = {
 }
 
 
+_ALT_SETUP_INSTRUCTIONS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "package_root": {
+            "type": "string",
+            "description": "PAIDEIA-mcp package root. Defaults to this server's source root.",
+        },
+        "prefer_venv": {"type": "boolean", "default": True},
+        "auto_install": {
+            "type": ["boolean", "null"],
+            "description": "Override PAIDEIA_MCP_AUTO_INSTALL. Defaults to false for venv, true for python3.",
+        },
+        "server_name": {"type": "string", "default": "PAIDEIA"},
+    },
+    "additionalProperties": False,
+}
+
+
+def _alt_alias(name: str) -> str:
+    return f"{ALT_TOOL_NAMESPACE}{name}"
+
+
+def _canonical_tool_name(name: str) -> str:
+    if name.startswith(ALT_TOOL_NAMESPACE):
+        return name[len(ALT_TOOL_NAMESPACE) :]
+    return name
+
+
+def _with_alt_aliases(tools: list[Tool]) -> list[Tool]:
+    aliases = [
+        Tool(
+            name=_alt_alias(tool.name),
+            description=(
+                f"PAIDEIA namespace alias for {tool.name}. Use this exact name when "
+                f"Alt searches for {_alt_alias(tool.name)}. {tool.description or ''}"
+            ).strip(),
+            inputSchema=tool.inputSchema,
+        )
+        for tool in tools
+    ]
+    return tools + aliases
+
+
 @app.list_prompts()
 async def _list_prompts() -> list[Prompt]:
     """Publish Alt-facing prompt templates when the MCP client supports prompts."""
@@ -633,9 +677,9 @@ async def _read_resource(uri: Any) -> list[ReadResourceContents]:
 
 @app.list_tools()
 async def _list_tools() -> list[Tool]:
-    """Publish the four tools the plugin exposes."""
+    """Publish PAIDEIA tools plus Alt namespace aliases."""
 
-    return [
+    tools = [
         Tool(
             name="ingest_pdfs",
             description=(
@@ -808,7 +852,16 @@ async def _list_tools() -> list[Tool]:
             ),
             inputSchema=_PAIDEIA_DOCTOR_SCHEMA,
         ),
+        Tool(
+            name="alt_setup_instructions",
+            description=(
+                "Return exact field-by-field values for Alt's local (stdio) MCP "
+                "server form: command, one-argument-per-line args, name, cwd, and env."
+            ),
+            inputSchema=_ALT_SETUP_INSTRUCTIONS_SCHEMA,
+        ),
     ]
+    return _with_alt_aliases(tools)
 
 
 _DISPATCH = {
@@ -838,6 +891,7 @@ _DISPATCH = {
     "alt_workflow_guide": workflow_guide,
     "alt_capability_manifest": build_alt_manifest,
     "paideia_doctor": paideia_doctor,
+    "alt_setup_instructions": alt_setup_instructions,
 }
 
 
@@ -847,7 +901,8 @@ async def _call_tool(
 ) -> list[TextContent]:
     """Dispatch a tool call and return its JSON-encoded result."""
 
-    handler = _DISPATCH.get(name)
+    canonical_name = _canonical_tool_name(name)
+    handler = _DISPATCH.get(canonical_name)
     if handler is None:
         return [
             TextContent(
@@ -882,6 +937,7 @@ async def _call_tool(
                     {
                         "error": f"{type(exc).__name__}: {exc}",
                         "tool": name,
+                        "canonical_tool": canonical_name,
                     },
                     ensure_ascii=False,
                 ),

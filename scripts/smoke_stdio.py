@@ -47,6 +47,13 @@ async def _run(course_root: Path) -> None:
             doctor_json = json.loads(doctor.content[0].text)
             print(f"doctor status: {doctor_json['status']}")
 
+            setup = await session.call_tool(
+                "alt_setup_instructions",
+                {"package_root": str(package_root)},
+            )
+            setup_json = json.loads(setup.content[0].text)
+            print(f"alt command: {setup_json['command']}")
+
             created = await session.call_tool(
                 "init_course",
                 {

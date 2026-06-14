@@ -25,3 +25,5 @@ jobs:
         run: python scripts/smoke_stdio.py
       - name: Run doctor CLI
         run: paideia-doctor --project-root /tmp/paideia-ci-course
+      - name: Print Alt setup fields
+        run: paideia-alt-setup

@@ -52,6 +52,14 @@ In Alt's MCP server dialog, choose the local stdio transport and use:
   PAIDEIA_MCP_AUTO_INSTALL = 0
 ```
 
+You can print these exact fields for your current checkout:
+
+```bash
+python3 scripts/alt_setup.py
+# or, after install
+paideia-alt-setup
+```
+
 Important: the `인수` box takes one argument per line. Do not put
 `python3 -m paideia_mcp.bootstrap` all in the `명령어` field.
 
@@ -212,7 +220,9 @@ paideia://alt/system-prompt  default operating prompt for Alt local models
 
 ## Tool Inventory
 
-Current tool discovery should show 26 tools:
+Current tool discovery should show 54 tools: 27 canonical tool names plus 27
+Alt-search namespace aliases. If Alt searches for `PAIDEIA__init_course`, use
+the alias directly; it routes to the same handler as `init_course`.
 
 ```text
 ingest_pdfs
@@ -240,8 +250,18 @@ hwmap
 generate_weakmap
 alt_workflow_guide
 alt_capability_manifest
+alt_setup_instructions
 paideia_doctor
 ```
+
+Every canonical tool above is also exposed with a `PAIDEIA__` prefix, for
+example `PAIDEIA__init_course`, `PAIDEIA__write_artifact`, and
+`PAIDEIA__alt_setup_instructions`. These aliases exist because Alt's tool
+search may look for server-prefixed names.
+
+In Alt chat, call PAIDEIA MCP tools directly by name. Do not use
+`alt_tool_search_bm25` with `category: "alt"` to find PAIDEIA tools; that
+category searches Alt-native note tools, not connected MCP server tools.
 
 ## Layout
 

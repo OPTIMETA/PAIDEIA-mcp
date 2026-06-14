@@ -10,6 +10,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from paideia_mcp.action import prepare_paideia_action
 from paideia_mcp.alt_manifest import ACTION_RECIPES, build_alt_manifest
+from paideia_mcp.alt_setup import alt_setup_instructions
 from paideia_mcp.doctor import paideia_doctor
 from paideia_mcp.exam_radar import import_exam_radar, parse_exam_radar_export
 from paideia_mcp.prompts import workflow_guide
@@ -319,7 +320,10 @@ def test_alt_workflow_guides_are_available_as_tool_and_prompts() -> None:
     tool_names = {t.name for t in tools}
     assert "alt_workflow_guide" in tool_names
     assert "alt_capability_manifest" in tool_names
+    assert "alt_setup_instructions" in tool_names
     assert "paideia_doctor" in tool_names
+    assert "PAIDEIA__init_course" in tool_names
+    assert "PAIDEIA__write_artifact" in tool_names
 
 
 def test_alt_manifest_covers_every_canonical_action() -> None:
@@ -332,7 +336,10 @@ def test_alt_manifest_covers_every_canonical_action() -> None:
     assert "alt_capability_manifest" in manifest["tools"]
     assert "import_alt_notes" in manifest["tools"]
     assert "bootstrap_alt_course" in manifest["tools"]
+    assert "alt_setup_instructions" in manifest["tools"]
     assert "paideia_doctor" in manifest["tools"]
+    assert "PAIDEIA__init_course" in manifest["tools"]
+    assert "PAIDEIA__write_artifact" in manifest["tools"]
     for action in manifest["actions"]:
         steps = action["recipe"]["steps"]
         assert steps, action["name"]
@@ -384,6 +391,25 @@ def test_paideia_doctor_reports_readiness_and_next_steps(tmp_path: Path) -> None
     assert initialized["course"]["artifact_counts"]["converted"] >= 1
     analyze = next(action for action in initialized["actions"] if action["action"] == "analyze")
     assert analyze["ready"] is True
+
+
+def test_alt_setup_instructions_match_local_stdio_form(tmp_path: Path) -> None:
+    root = tmp_path / "PAIDEIA-mcp"
+    root.mkdir()
+    setup = alt_setup_instructions(str(root), prefer_venv=True)
+
+    assert setup["schema"] == "paideia-alt-setup:v1"
+    assert setup["command"].endswith(".venv/bin/python")
+    assert setup["args"] == ["-m", "paideia_mcp.bootstrap"]
+    assert setup["args_multiline"] == "-m\npaideia_mcp.bootstrap"
+    assert setup["working_directory"] == str(root)
+    assert setup["env"]["PAIDEIA_MCP_AUTO_INSTALL"] == "0"
+    assert "명령어" in setup["text"]
+    assert "한 줄에 하나" in setup["text"]
+
+    no_venv = alt_setup_instructions(str(root), prefer_venv=False)
+    assert no_venv["command"] == "python3"
+    assert no_venv["env"]["PAIDEIA_MCP_AUTO_INSTALL"] == "1"
 
 
 def test_end_to_end_alt_local_model_workflow(tmp_path: Path) -> None:
@@ -459,9 +485,12 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 assert "save_course_index" in tool_names
                 assert "save_grade_report" in tool_names
                 assert "alt_capability_manifest" in tool_names
+                assert "alt_setup_instructions" in tool_names
                 assert "import_alt_notes" in tool_names
                 assert "bootstrap_alt_course" in tool_names
                 assert "paideia_doctor" in tool_names
+                assert "PAIDEIA__init_course" in tool_names
+                assert "PAIDEIA__write_artifact" in tool_names
 
                 prompts = await session.list_prompts()
                 assert "paideia-operating-guide" in {
@@ -518,6 +547,26 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 )
                 manifest_tool_json = json.loads(manifest_tool.content[0].text)
                 assert manifest_tool_json["project_root"] == str(course_root)
+
+                setup_tool = await session.call_tool(
+                    "alt_setup_instructions",
+                    {"package_root": str(package_root)},
+                )
+                setup_tool_json = json.loads(setup_tool.content[0].text)
+                assert setup_tool_json["args"] == ["-m", "paideia_mcp.bootstrap"]
+                assert setup_tool_json["working_directory"] == str(package_root)
+
+                alias_write = await session.call_tool(
+                    "PAIDEIA__write_artifact",
+                    {
+                        "project_root": str(course_root),
+                        "path": "course-index/alias-smoke.md",
+                        "content": "# Alias Smoke\n",
+                    },
+                )
+                alias_write_json = json.loads(alias_write.content[0].text)
+                assert alias_write_json["path"] == "course-index/alias-smoke.md"
+                assert (course_root / "course-index" / "alias-smoke.md").exists()
 
                 batch = await session.call_tool(
                     "import_alt_notes",

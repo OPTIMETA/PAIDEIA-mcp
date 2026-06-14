@@ -49,6 +49,10 @@ Course root: {root}
 
 Core PAIDEIA rules:
 - The durable study graph lives on disk as markdown/YAML.
+- PAIDEIA MCP tools are already connected tools. Do not use Alt's `alt_tool_search_bm25`
+  with `category="alt"` to find them; that search category is for Alt-native note tools.
+- Prefer the explicit `PAIDEIA__...` aliases in Alt when a server-prefixed tool name is needed,
+  for example `PAIDEIA__init_course` or `PAIDEIA__write_artifact`.
 - Use `init_course` before writing into a new course folder.
 - Use `import_alt_note` when Alt provides an active note transcript.
 - Use `prepare_paideia_action` before generating any non-trivial PAIDEIA artifact.

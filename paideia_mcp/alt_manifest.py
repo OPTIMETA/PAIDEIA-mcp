@@ -8,7 +8,10 @@ from .prompts import list_prompt_specs, workflow_guide
 from .repo_parser import CANONICAL_ACTIONS, parse_paideia_repo
 
 
-MCP_TOOLS = [
+ALT_TOOL_NAMESPACE = "PAIDEIA__"
+
+
+MCP_TOOLS_BASE = [
     "ingest_pdfs",
     "grade_pdf",
     "build_course_index",
@@ -34,8 +37,12 @@ MCP_TOOLS = [
     "generate_weakmap",
     "alt_workflow_guide",
     "alt_capability_manifest",
+    "alt_setup_instructions",
     "paideia_doctor",
 ]
+
+
+MCP_TOOLS = MCP_TOOLS_BASE + [f"{ALT_TOOL_NAMESPACE}{name}" for name in MCP_TOOLS_BASE]
 
 
 ACTION_RECIPES: dict[str, dict[str, Any]] = {
@@ -212,6 +219,8 @@ def build_alt_manifest(
         },
         "paideia_rules": [
             "Durable study graph lives on disk as markdown/YAML.",
+            "Call PAIDEIA MCP tools directly; do not search category='alt' for them.",
+            "When Alt expects server-prefixed names, use PAIDEIA__ aliases such as PAIDEIA__init_course.",
             "HW density is the primary exam-probability signal.",
             "Alt/Exam Radar lecture emphasis is a second signal and must not silently overwrite HW tiers.",
             "Attempt-first drills ask for strategy before revealing solutions.",
