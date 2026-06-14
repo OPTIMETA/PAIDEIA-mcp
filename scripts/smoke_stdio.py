@@ -40,6 +40,13 @@ async def _run(course_root: Path) -> None:
             manifest_json = json.loads(manifest.contents[0].text)
             print(f"manifest actions: {manifest_json['action_count']}")
 
+            doctor = await session.call_tool(
+                "paideia_doctor",
+                {"project_root": str(course_root)},
+            )
+            doctor_json = json.loads(doctor.content[0].text)
+            print(f"doctor status: {doctor_json['status']}")
+
             created = await session.call_tool(
                 "init_course",
                 {

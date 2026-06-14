@@ -34,6 +34,7 @@ MCP_TOOLS = [
     "generate_weakmap",
     "alt_workflow_guide",
     "alt_capability_manifest",
+    "paideia_doctor",
 ]
 
 

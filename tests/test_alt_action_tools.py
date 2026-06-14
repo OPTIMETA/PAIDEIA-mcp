@@ -10,6 +10,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from paideia_mcp.action import prepare_paideia_action
 from paideia_mcp.alt_manifest import ACTION_RECIPES, build_alt_manifest
+from paideia_mcp.doctor import paideia_doctor
 from paideia_mcp.exam_radar import import_exam_radar, parse_exam_radar_export
 from paideia_mcp.prompts import workflow_guide
 from paideia_mcp.repo_parser import CANONICAL_ACTIONS, parse_paideia_repo
@@ -268,6 +269,7 @@ def test_alt_workflow_guides_are_available_as_tool_and_prompts() -> None:
     tool_names = {t.name for t in tools}
     assert "alt_workflow_guide" in tool_names
     assert "alt_capability_manifest" in tool_names
+    assert "paideia_doctor" in tool_names
 
 
 def test_alt_manifest_covers_every_canonical_action() -> None:
@@ -277,9 +279,10 @@ def test_alt_manifest_covers_every_canonical_action() -> None:
     assert action_names == set(CANONICAL_ACTIONS)
     assert set(ACTION_RECIPES) == set(CANONICAL_ACTIONS)
     assert manifest["action_count"] == 16
-    assert manifest["tools"][-1] == "alt_capability_manifest"
+    assert "alt_capability_manifest" in manifest["tools"]
     assert "import_alt_notes" in manifest["tools"]
     assert "bootstrap_alt_course" in manifest["tools"]
+    assert "paideia_doctor" in manifest["tools"]
     for action in manifest["actions"]:
         steps = action["recipe"]["steps"]
         assert steps, action["name"]
@@ -302,6 +305,35 @@ def test_alt_manifest_is_available_as_resource() -> None:
 
     prompt_resource = asyncio.run(_read_resource("paideia://alt/system-prompt"))
     assert "You are Alt's local model" in prompt_resource[0].content
+
+
+def test_paideia_doctor_reports_readiness_and_next_steps(tmp_path: Path) -> None:
+    root = tmp_path / "course"
+
+    empty = paideia_doctor(str(root))
+    assert empty["status"] == "course-not-initialized"
+    assert empty["mcp"]["tool_count"] >= 26
+    assert "bootstrap_alt_course" in " ".join(empty["recommendations"])
+
+    bootstrap_alt_course(
+        str(root),
+        course_name="Doctor",
+        exam_date="2026-12-01",
+        notes=[
+            {
+                "note_id": "d1",
+                "title": "Lecture",
+                "transcript": "Repeated exam signal.",
+            }
+        ],
+        git_init=False,
+    )
+    initialized = paideia_doctor(str(root))
+    assert initialized["status"] == "needs-analysis"
+    assert initialized["course"]["initialized"] is True
+    assert initialized["course"]["artifact_counts"]["converted"] >= 1
+    analyze = next(action for action in initialized["actions"] if action["action"] == "analyze")
+    assert analyze["ready"] is True
 
 
 def test_end_to_end_alt_local_model_workflow(tmp_path: Path) -> None:
@@ -379,6 +411,7 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 assert "alt_capability_manifest" in tool_names
                 assert "import_alt_notes" in tool_names
                 assert "bootstrap_alt_course" in tool_names
+                assert "paideia_doctor" in tool_names
 
                 prompts = await session.list_prompts()
                 assert "paideia-operating-guide" in {
@@ -397,6 +430,13 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 manifest_read = await session.read_resource("paideia://alt/manifest")
                 manifest = json.loads(manifest_read.contents[0].text)
                 assert manifest["action_count"] == 16
+
+                doctor = await session.call_tool(
+                    "paideia_doctor",
+                    {"project_root": str(course_root)},
+                )
+                doctor_json = json.loads(doctor.content[0].text)
+                assert doctor_json["status"] == "course-not-initialized"
 
                 created = await session.call_tool(
                     "init_course",

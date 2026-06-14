@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paideia-mcp"
-version = "0.5.2"
+version = "0.5.3"
 description = "Standalone local MCP server for using the full PAIDEIA course-folder workflow from Alt local models."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
 
 [project.scripts]
 paideia-mcp = "paideia_mcp.server:main"
+paideia-doctor = "paideia_mcp.doctor_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["paideia_mcp*"]

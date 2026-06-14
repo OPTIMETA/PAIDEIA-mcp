@@ -28,6 +28,7 @@ from mcp.types import GetPromptResult, Prompt, PromptArgument, PromptMessage, Re
 from .action import list_paideia_actions, prepare_paideia_action
 from .alt_manifest import alt_system_prompt, build_alt_manifest
 from .analyze import build_course_index
+from .doctor import paideia_doctor
 from .exam_radar import import_exam_radar, parse_exam_radar_export
 from .grade import grade_pdf
 from .ingest import ingest_pdfs
@@ -535,6 +536,16 @@ _ALT_CAPABILITY_MANIFEST_SCHEMA: dict[str, Any] = {
 }
 
 
+_PAIDEIA_DOCTOR_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "project_root": _PROJECT_ROOT_PROP,
+        "repo_root": _REPO_SCHEMA["properties"]["repo_root"],
+    },
+    "additionalProperties": False,
+}
+
+
 @app.list_prompts()
 async def _list_prompts() -> list[Prompt]:
     """Publish Alt-facing prompt templates when the MCP client supports prompts."""
@@ -789,6 +800,14 @@ async def _list_tools() -> list[Tool]:
             ),
             inputSchema=_ALT_CAPABILITY_MANIFEST_SCHEMA,
         ),
+        Tool(
+            name="paideia_doctor",
+            description=(
+                "Diagnose PAIDEIA MCP install health, external dependencies, "
+                "course-folder readiness, action prerequisites, and next steps."
+            ),
+            inputSchema=_PAIDEIA_DOCTOR_SCHEMA,
+        ),
     ]
 
 
@@ -818,6 +837,7 @@ _DISPATCH = {
     "generate_weakmap": generate_weakmap,
     "alt_workflow_guide": workflow_guide,
     "alt_capability_manifest": build_alt_manifest,
+    "paideia_doctor": paideia_doctor,
 }
 
 

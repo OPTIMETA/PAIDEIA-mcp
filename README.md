@@ -28,6 +28,15 @@ Install dependencies from this folder:
 python3 -m pip install -e .
 ```
 
+On Homebrew-managed Python, use a virtual environment if pip reports an
+externally-managed environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
 In Alt's MCP server dialog, choose the local stdio transport and use:
 
 ```text
@@ -35,6 +44,9 @@ Command: python3
 Args: -m paideia_mcp.bootstrap
 Working directory: /absolute/path/to/PAIDEIA-mcp
 ```
+
+If you installed into `.venv`, set `Command` to
+`/absolute/path/to/PAIDEIA-mcp/.venv/bin/python` and keep the same args.
 
 If Alt asks for a single command string instead of command/args fields:
 
@@ -62,6 +74,14 @@ Before adding it to Alt, you can test the exact stdio path:
 
 ```bash
 python3 scripts/smoke_stdio.py
+```
+
+To diagnose an install or course folder:
+
+```bash
+python3 scripts/doctor.py --project-root /absolute/path/to/course
+# or, after `python3 -m pip install -e .`
+paideia-doctor --project-root /absolute/path/to/course
 ```
 
 The current Alt plugin SDK exposes notes/AI/storage/files, but not a plugin-side
@@ -101,6 +121,7 @@ These tools write/read PAIDEIA artifacts directly:
 | `save_grade_report` | Save local-model grading feedback under `answers/converted/` and append canonical error-log entries. |
 | `read_artifact` / `write_artifact` / `append_error` | Safe local artifact operations under the course root. |
 | `alt_workflow_guide` | Return the same Alt operating policy as a tool for clients that do not expose MCP prompts. |
+| `paideia_doctor` | Diagnose install health, dependencies, course readiness, action prerequisites, and next steps. |
 
 ### PAIDEIA repo parser / action composer
 
@@ -161,7 +182,7 @@ paideia://alt/system-prompt  default operating prompt for Alt local models
 
 ## Tool Inventory
 
-Current tool discovery should show 25 tools:
+Current tool discovery should show 26 tools:
 
 ```text
 ingest_pdfs
@@ -189,6 +210,7 @@ hwmap
 generate_weakmap
 alt_workflow_guide
 alt_capability_manifest
+paideia_doctor
 ```
 
 ## Layout
