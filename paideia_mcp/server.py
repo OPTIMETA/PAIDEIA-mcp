@@ -37,7 +37,9 @@ from .repo_parser import parse_paideia_repo
 from .study_tools import generate_weakmap, hwmap, pattern_lookup
 from .workspace import (
     append_error,
+    bootstrap_alt_course,
     import_alt_note,
+    import_alt_notes,
     init_course,
     list_artifacts,
     read_artifact,
@@ -264,6 +266,77 @@ _IMPORT_ALT_NOTE_SCHEMA: dict[str, Any] = {
         "overwrite": {"type": "boolean", "default": False},
     },
     "required": ["title", "transcript"],
+    "additionalProperties": False,
+}
+
+
+_ALT_NOTE_PAYLOAD_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "note_id": {
+            "type": ["string", "integer", "null"],
+            "description": "Alt note id. noteId/id aliases are also accepted by the tool.",
+        },
+        "noteId": {"type": ["string", "integer", "null"]},
+        "id": {"type": ["string", "integer", "null"]},
+        "title": {"type": "string"},
+        "transcript": {"type": "string"},
+        "memo": {"type": "string", "default": ""},
+        "summary": {"type": "string", "default": ""},
+        "category": {
+            "type": "string",
+            "enum": ["lectures", "textbook", "homework", "solutions"],
+        },
+    },
+    "required": ["title", "transcript"],
+    "additionalProperties": False,
+}
+
+
+_IMPORT_ALT_NOTES_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "project_root": _PROJECT_ROOT_PROP,
+        "notes": {"type": "array", "items": _ALT_NOTE_PAYLOAD_SCHEMA},
+        "category": {
+            "type": "string",
+            "enum": ["lectures", "textbook", "homework", "solutions"],
+            "default": "lectures",
+        },
+        "write_converted": {"type": "boolean", "default": True},
+        "overwrite": {"type": "boolean", "default": False},
+        "continue_on_error": {"type": "boolean", "default": True},
+    },
+    "required": ["notes"],
+    "additionalProperties": False,
+}
+
+
+_BOOTSTRAP_ALT_COURSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "project_root": _PROJECT_ROOT_PROP,
+        "course_name": {"type": "string"},
+        "exam_date": {"type": "string", "description": "YYYY-MM-DD."},
+        "notes": {"type": "array", "items": _ALT_NOTE_PAYLOAD_SCHEMA, "default": []},
+        "exam_type": {"type": "string", "default": "exam"},
+        "weak_zones": {"type": "string", "default": "unknown"},
+        "ocr_engine": {
+            "type": "string",
+            "enum": ["codex-native", "qwen3-vl", "tesseract"],
+            "default": "codex-native",
+        },
+        "git_init": {"type": "boolean", "default": True},
+        "category": {
+            "type": "string",
+            "enum": ["lectures", "textbook", "homework", "solutions"],
+            "default": "lectures",
+        },
+        "write_converted": {"type": "boolean", "default": True},
+        "overwrite_notes": {"type": "boolean", "default": False},
+        "continue_on_error": {"type": "boolean", "default": True},
+    },
+    "required": ["project_root", "course_name", "exam_date"],
     "additionalProperties": False,
 }
 
@@ -631,6 +704,22 @@ async def _list_tools() -> list[Tool]:
             inputSchema=_IMPORT_ALT_NOTE_SCHEMA,
         ),
         Tool(
+            name="import_alt_notes",
+            description=(
+                "Batch-import Alt note payloads from alt.notes.getContent into "
+                "materials/<category> and converted/<category>."
+            ),
+            inputSchema=_IMPORT_ALT_NOTES_SCHEMA,
+        ),
+        Tool(
+            name="bootstrap_alt_course",
+            description=(
+                "Create a PAIDEIA course folder and import an initial batch of "
+                "Alt note transcripts in one call."
+            ),
+            inputSchema=_BOOTSTRAP_ALT_COURSE_SCHEMA,
+        ),
+        Tool(
             name="save_action_artifact",
             description=(
                 "Save a local-model-generated PAIDEIA action output to canonical "
@@ -716,6 +805,8 @@ _DISPATCH = {
     "read_artifact": read_artifact,
     "write_artifact": write_artifact,
     "import_alt_note": import_alt_note,
+    "import_alt_notes": import_alt_notes,
+    "bootstrap_alt_course": bootstrap_alt_course,
     "save_action_artifact": save_action_artifact,
     "save_course_index": save_course_index,
     "save_grade_report": save_grade_report,

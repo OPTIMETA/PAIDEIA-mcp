@@ -21,6 +21,8 @@ MCP_TOOLS = [
     "read_artifact",
     "write_artifact",
     "import_alt_note",
+    "import_alt_notes",
+    "bootstrap_alt_course",
     "save_action_artifact",
     "save_course_index",
     "save_grade_report",
@@ -40,6 +42,10 @@ ACTION_RECIPES: dict[str, dict[str, Any]] = {
         "mode": "deterministic",
         "steps": [
             {"tool": "init_course", "purpose": "Create the local PAIDEIA folder contract."},
+            {
+                "tool": "bootstrap_alt_course",
+                "purpose": "Use instead when Alt is creating a new course and already has initial note transcripts.",
+            },
             {"tool": "alt_workflow_guide", "purpose": "Return next-step operating guidance if needed."},
         ],
     },
@@ -47,8 +53,12 @@ ACTION_RECIPES: dict[str, dict[str, Any]] = {
         "mode": "deterministic-or-alt-note-assisted",
         "steps": [
             {
+                "tool": "import_alt_notes",
+                "purpose": "Preferred when Alt hands over multiple selected notes from alt.notes.getContent.",
+            },
+            {
                 "tool": "import_alt_note",
-                "purpose": "When the source is an Alt note/transcript, persist it into materials/ and converted/.",
+                "purpose": "Use for one active Alt note/transcript.",
             },
             {
                 "tool": "ingest_pdfs",

@@ -380,6 +380,104 @@ def import_alt_note(
     }
 
 
+def import_alt_notes(
+    project_root: str | None,
+    notes: list[dict[str, Any]],
+    category: str = "lectures",
+    write_converted: bool = True,
+    overwrite: bool = False,
+    continue_on_error: bool = True,
+) -> dict[str, Any]:
+    """Import multiple Alt note payloads into a PAIDEIA course folder.
+
+    This is the natural handoff shape for Alt SDK clients:
+    ``alt.notes.list`` selects note ids, ``alt.notes.getContent`` returns
+    title/transcript/memo/summary, and the host/local model forwards that array
+    to MCP in one call.
+    """
+
+    imported: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for i, note in enumerate(notes):
+        title = str(note.get("title") or f"Alt note {note.get('note_id') or i + 1}")
+        transcript = str(note.get("transcript") or "")
+        note_id = note.get("note_id", note.get("noteId", note.get("id")))
+        try:
+            imported.append(
+                import_alt_note(
+                    project_root=project_root,
+                    title=title,
+                    transcript=transcript,
+                    note_id=note_id,
+                    memo=str(note.get("memo") or ""),
+                    summary=str(note.get("summary") or ""),
+                    category=str(note.get("category") or category),
+                    write_converted=write_converted,
+                    overwrite=overwrite,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - batch import should report per-note failures
+            errors.append(
+                {
+                    "index": i,
+                    "note_id": note_id,
+                    "title": title,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            if not continue_on_error:
+                break
+
+    root = resolve_root(project_root)
+    return {
+        "project_root": str(root),
+        "imported_count": len(imported),
+        "error_count": len(errors),
+        "imported": imported,
+        "errors": errors,
+    }
+
+
+def bootstrap_alt_course(
+    project_root: str,
+    course_name: str,
+    exam_date: str,
+    notes: list[dict[str, Any]] | None = None,
+    exam_type: str = "exam",
+    weak_zones: str = "unknown",
+    ocr_engine: str = "codex-native",
+    git_init: bool = True,
+    category: str = "lectures",
+    write_converted: bool = True,
+    overwrite_notes: bool = False,
+    continue_on_error: bool = True,
+) -> dict[str, Any]:
+    """Initialize a course folder and import an initial batch of Alt notes."""
+
+    init = init_course(
+        project_root=project_root,
+        course_name=course_name,
+        exam_date=exam_date,
+        exam_type=exam_type,
+        weak_zones=weak_zones,
+        ocr_engine=ocr_engine,
+        git_init=git_init,
+    )
+    imported = import_alt_notes(
+        project_root=project_root,
+        notes=notes or [],
+        category=category,
+        write_converted=write_converted,
+        overwrite=overwrite_notes,
+        continue_on_error=continue_on_error,
+    )
+    return {
+        "project_root": init["project_root"],
+        "init": init,
+        "notes": imported,
+    }
+
+
 def save_action_artifact(
     project_root: str | None,
     action: str,

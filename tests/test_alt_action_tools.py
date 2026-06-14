@@ -17,7 +17,9 @@ from paideia_mcp.server import _get_prompt, _list_prompts, _list_resources, _lis
 from paideia_mcp.study_tools import generate_weakmap, hwmap, pattern_lookup
 from paideia_mcp.workspace import (
     append_error,
+    bootstrap_alt_course,
     import_alt_note,
+    import_alt_notes,
     init_course,
     read_artifact,
     save_action_artifact,
@@ -149,6 +151,51 @@ def test_import_alt_note_writes_materials_and_converted(tmp_path: Path) -> None:
     )
 
 
+def test_import_alt_notes_and_bootstrap_alt_course_handle_batches(tmp_path: Path) -> None:
+    root = tmp_path / "course"
+    init_course(str(root), "Batch", "2026-12-01")
+
+    batch = import_alt_notes(
+        str(root),
+        [
+            {
+                "noteId": 1,
+                "title": "Lecture 1 Eigenvalues",
+                "transcript": "Eigenvalues are exam-critical.",
+                "memo": "Do examples.",
+            },
+            {
+                "id": 2,
+                "title": "Lecture 2 Orthogonality",
+                "transcript": "Projection and orthogonality repeat.",
+                "summary": "Projection lecture.",
+            },
+        ],
+    )
+
+    assert batch["imported_count"] == 2
+    assert batch["error_count"] == 0
+    assert len(list((root / "converted" / "lectures").glob("*.md"))) == 2
+
+    boot_root = tmp_path / "boot"
+    boot = bootstrap_alt_course(
+        str(boot_root),
+        course_name="Linear Algebra",
+        exam_date="2026-12-01",
+        notes=[
+            {
+                "note_id": "alt-3",
+                "title": "Lecture 3 SVD",
+                "transcript": "SVD is emphasized.",
+            }
+        ],
+        git_init=False,
+    )
+    assert (boot_root / ".course-meta").exists()
+    assert boot["notes"]["imported_count"] == 1
+    assert len(list((boot_root / "materials" / "lectures").glob("*.md"))) == 1
+
+
 def test_save_action_artifact_uses_paideia_paths(tmp_path: Path) -> None:
     root = tmp_path / "course"
     init_course(str(root), "Calc", "2026-12-01")
@@ -231,6 +278,8 @@ def test_alt_manifest_covers_every_canonical_action() -> None:
     assert set(ACTION_RECIPES) == set(CANONICAL_ACTIONS)
     assert manifest["action_count"] == 16
     assert manifest["tools"][-1] == "alt_capability_manifest"
+    assert "import_alt_notes" in manifest["tools"]
+    assert "bootstrap_alt_course" in manifest["tools"]
     for action in manifest["actions"]:
         steps = action["recipe"]["steps"]
         assert steps, action["name"]
@@ -328,6 +377,8 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 assert "save_course_index" in tool_names
                 assert "save_grade_report" in tool_names
                 assert "alt_capability_manifest" in tool_names
+                assert "import_alt_notes" in tool_names
+                assert "bootstrap_alt_course" in tool_names
 
                 prompts = await session.list_prompts()
                 assert "paideia-operating-guide" in {
@@ -377,5 +428,21 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 )
                 manifest_tool_json = json.loads(manifest_tool.content[0].text)
                 assert manifest_tool_json["project_root"] == str(course_root)
+
+                batch = await session.call_tool(
+                    "import_alt_notes",
+                    {
+                        "project_root": str(course_root),
+                        "notes": [
+                            {
+                                "note_id": 11,
+                                "title": "Lecture 11",
+                                "transcript": "This topic is repeated.",
+                            }
+                        ],
+                    },
+                )
+                batch_json = json.loads(batch.content[0].text)
+                assert batch_json["imported_count"] == 1
 
     asyncio.run(run_smoke())

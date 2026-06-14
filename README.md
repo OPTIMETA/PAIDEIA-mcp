@@ -64,6 +64,16 @@ Before adding it to Alt, you can test the exact stdio path:
 python3 scripts/smoke_stdio.py
 ```
 
+The current Alt plugin SDK exposes notes/AI/storage/files, but not a plugin-side
+MCP client API. The intended bridge is:
+
+1. Alt SDK reads notes with `alt.notes.list` / `alt.notes.getContent`.
+2. Alt's MCP-enabled local model or host integration calls PAIDEIA MCP with
+   those note payloads.
+3. PAIDEIA MCP writes the durable local course folder.
+
+See `examples/alt-sdk-note-handoff.ts` for the SDK-side payload shape.
+
 ## How Alt Uses It
 
 There are two classes of tools.
@@ -84,6 +94,8 @@ These tools write/read PAIDEIA artifacts directly:
 | `hwmap` | Return HW-density exam-priority rows from `coverage.md`. |
 | `generate_weakmap` | Write a compact timestamped weakmap from `errors/log.md`. |
 | `import_alt_note` | Take an Alt active note title/transcript and write durable `materials/lectures/*.md` plus `converted/lectures/*.md`. |
+| `import_alt_notes` | Batch-import multiple Alt note payloads from `alt.notes.getContent`. |
+| `bootstrap_alt_course` | Initialize a PAIDEIA course folder and import an initial Alt note batch in one call. |
 | `save_action_artifact` | Save model-generated PAIDEIA outputs to canonical paths such as `quizzes/*`, `mock/*`, `derivations/*`, `cheatsheet/final.md`. |
 | `save_course_index` | Save local-model analyze outputs to `course-index/summary.md`, `patterns.md`, and `coverage.md` together. |
 | `save_grade_report` | Save local-model grading feedback under `answers/converted/` and append canonical error-log entries. |
@@ -102,7 +114,8 @@ These tools make all PAIDEIA actions available to Alt's local model:
 
 The important pattern is:
 
-1. Alt calls `import_alt_note` for lecture transcripts it wants PAIDEIA to use.
+1. Alt calls `bootstrap_alt_course` for a new course with selected note transcripts,
+   or `import_alt_notes` / `import_alt_note` for later lecture transcripts.
 2. Alt calls `prepare_paideia_action(action="quiz", args="weakmap 5")`.
 3. Alt's local model drafts the PAIDEIA artifact using the returned instruction.
 4. Alt calls `save_action_artifact` to save standard outputs, or `write_artifact`
@@ -148,7 +161,7 @@ paideia://alt/system-prompt  default operating prompt for Alt local models
 
 ## Tool Inventory
 
-Current tool discovery should show 23 tools:
+Current tool discovery should show 25 tools:
 
 ```text
 ingest_pdfs
@@ -163,6 +176,8 @@ list_artifacts
 read_artifact
 write_artifact
 import_alt_note
+import_alt_notes
+bootstrap_alt_course
 save_action_artifact
 save_course_index
 save_grade_report
@@ -216,8 +231,8 @@ host and can read the returned page images with its own vision tool.
 - This MCP server can write markdown files and append YAML logs inside a local
   PAIDEIA course folder.
 - It does not automatically read Alt's private note database. Alt should pass
-  the active note title/transcript into `import_alt_note`, or expose a separate
-  Alt Notes MCP/tool surface.
+  active/selected note title/transcript/memo/summary payloads into
+  `bootstrap_alt_course`, `import_alt_notes`, or `import_alt_note`.
 - `import_exam_radar` already accepts the fixed markdown emitted by Exam Radar's
   copy button.
 - `alt_capability_manifest` / `paideia://alt/manifest` gives Alt's local model

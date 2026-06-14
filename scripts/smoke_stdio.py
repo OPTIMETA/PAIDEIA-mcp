@@ -51,6 +51,22 @@ async def _run(course_root: Path) -> None:
             )
             print(json.dumps(json.loads(created.content[0].text), indent=2))
 
+            imported = await session.call_tool(
+                "import_alt_notes",
+                {
+                    "project_root": str(course_root),
+                    "notes": [
+                        {
+                            "note_id": "smoke-1",
+                            "title": "Smoke lecture",
+                            "transcript": "This transcript verifies Alt note batch handoff.",
+                        }
+                    ],
+                },
+            )
+            imported_json = json.loads(imported.content[0].text)
+            print(f"imported notes: {imported_json['imported_count']}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
