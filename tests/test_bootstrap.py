@@ -23,7 +23,7 @@ def test_bootstrap_merges_gitignore_into_existing_repo(tmp_path: Path) -> None:
         exam_date="2099-01-01",
         exam_type="final",
         weak_zones="unknown",
-        ocr_engine="codex-native",
+        ocr_engine="qwen3-vl",
     )
 
     body = gitignore.read_text(encoding="utf-8")

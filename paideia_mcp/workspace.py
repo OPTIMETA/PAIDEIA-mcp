@@ -84,7 +84,7 @@ does not silently overwrite the HW-derived tier.
 """
 
 
-VALID_ENGINES = {"codex-native", "qwen3-vl", "tesseract"}
+VALID_ENGINES = {"qwen3-vl", "tesseract"}
 ALLOWED_TOP_LEVEL = {
     ".course-meta",
     "AGENTS.md",
@@ -170,7 +170,7 @@ def init_course(
     exam_date: str,
     exam_type: str = "exam",
     weak_zones: str = "unknown",
-    ocr_engine: str = "codex-native",
+    ocr_engine: str = "qwen3-vl",
     git_init: bool = True,
 ) -> dict[str, Any]:
     """Create the PAIDEIA folder skeleton and seed core files."""
@@ -445,7 +445,7 @@ def bootstrap_alt_course(
     notes: list[dict[str, Any]] | None = None,
     exam_type: str = "exam",
     weak_zones: str = "unknown",
-    ocr_engine: str = "codex-native",
+    ocr_engine: str = "qwen3-vl",
     git_init: bool = True,
     category: str = "lectures",
     write_converted: bool = True,

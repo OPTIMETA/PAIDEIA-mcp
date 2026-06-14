@@ -44,20 +44,27 @@ def test_duplicate_stems_in_nested_directories_do_not_collide(tmp_path: Path, mo
         tmp_path / "materials" / "homework" / "setB" / "problem.pdf",
         "Set B problem",
     )
+    # Force single-worker (in-process) and stub OCR so the test needs no Ollama
+    # or tesseract install — we only care about destination routing here.
     monkeypatch.setattr(ingest, "_default_workers", lambda engine: 1)
+    import paideia_mcp.ocr as ocr
+
+    monkeypatch.setattr(
+        ocr,
+        "run_ocr",
+        lambda engine, paths, project_root=None: (["stub"] * len(paths), "tesseract"),
+    )
 
     result = ingest.ingest_pdfs(project_root=str(tmp_path))
 
-    pending = {Path(item["destination"]).relative_to(tmp_path) for item in result["pending"]}
-    assert pending == {
+    assert result["mode"] == "ocr-complete"
+    converted = {Path(item["destination"]).relative_to(tmp_path) for item in result["converted"]}
+    assert converted == {
         Path("converted/homework/setA/problem.md"),
         Path("converted/homework/setB/problem.md"),
     }
-    cache_dirs = {
-        Path(item["page_paths"][0]).relative_to(tmp_path).parent for item in result["pending"]
-    }
-    assert cache_dirs == {
-        Path(".paideia-cache/pages/homework/setA/problem"),
-        Path(".paideia-cache/pages/homework/setB/problem"),
-    }
     assert result["failed"] == []
+    # Both converted files carry the engine that actually ran.
+    for item in result["converted"]:
+        body = (tmp_path / item["destination"]).read_text(encoding="utf-8")
+        assert "<!-- engine: tesseract -->" in body

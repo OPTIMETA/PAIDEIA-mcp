@@ -69,15 +69,13 @@ _INGEST_SCHEMA: dict[str, Any] = {
     "properties": {
         "engine": {
             "type": "string",
-            "enum": ["codex-native", "qwen3-vl", "tesseract"],
-            "default": "codex-native",
+            "enum": ["qwen3-vl", "tesseract"],
+            "default": "qwen3-vl",
             "description": (
-                "OCR engine. codex-native (default) renders PDFs to PNGs "
-                "under .paideia-cache/ and returns a manifest so the calling "
-                "skill can read pages with Codex CLI's bundled vision (no "
-                "extra API billing for ChatGPT subscribers). qwen3-vl needs a "
-                "local Ollama with qwen3-vl:8b. tesseract needs pytesseract "
-                "with eng and/or kor traineddata."
+                "OCR engine, run fully in-process. qwen3-vl (default) uses a "
+                "local Ollama with qwen3-vl:8b and falls back to tesseract "
+                "automatically when Ollama is unavailable. tesseract needs "
+                "pytesseract with eng and/or kor traineddata."
             ),
         },
         "force": {
@@ -111,10 +109,10 @@ _GRADE_SCHEMA: dict[str, Any] = {
         },
         "engine": {
             "type": "string",
-            "enum": ["codex-native", "qwen3-vl", "tesseract"],
+            "enum": ["qwen3-vl", "tesseract"],
             "description": (
                 "Override the OCR engine. When omitted, falls back to "
-                ".course-meta OCR_ENGINE, then to codex-native."
+                ".course-meta OCR_ENGINE, then to qwen3-vl."
             ),
         },
         "project_root": _PROJECT_ROOT_PROP,
@@ -164,8 +162,8 @@ _INIT_COURSE_SCHEMA: dict[str, Any] = {
         "weak_zones": {"type": "string", "default": "unknown"},
         "ocr_engine": {
             "type": "string",
-            "enum": ["codex-native", "qwen3-vl", "tesseract"],
-            "default": "codex-native",
+            "enum": ["qwen3-vl", "tesseract"],
+            "default": "qwen3-vl",
         },
         "git_init": {"type": "boolean", "default": True},
     },
@@ -325,8 +323,8 @@ _BOOTSTRAP_ALT_COURSE_SCHEMA: dict[str, Any] = {
         "weak_zones": {"type": "string", "default": "unknown"},
         "ocr_engine": {
             "type": "string",
-            "enum": ["codex-native", "qwen3-vl", "tesseract"],
-            "default": "codex-native",
+            "enum": ["qwen3-vl", "tesseract"],
+            "default": "qwen3-vl",
         },
         "git_init": {"type": "boolean", "default": True},
         "category": {

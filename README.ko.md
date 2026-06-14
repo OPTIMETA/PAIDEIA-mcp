@@ -337,15 +337,20 @@ Alt 채팅에서는 PAIDEIA MCP 도구를 이름으로 직접 호출하세요. P
 
 ## 엔진
 
-| 엔진 | 기본값? | MCP가 OCR을 하나? | 필요 조건 | 필기 품질 | 슬라이드 품질 |
-|---|---|---|---|---|---|
-| `codex-native` | 예 | 아니오 — 스킬이 Codex 내장 비전으로 페이지 이미지를 읽음 | ChatGPT Plus/Pro/Business/Edu/Enterprise로 로그인한 Codex CLI (추가 API 키 불필요) | 높음 | 높음 |
-| `qwen3-vl` | 아니오 | 예 | `ollama pull qwen3-vl:8b` (~6 GB) | 높음, 오프라인 | 높음, 오프라인 |
-| `tesseract` | 아니오 | 예 | `tesseract` + `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata 중 하나 이상 | 낮음 | 중간 |
+두 엔진 모두 **MCP 프로세스 안에서** OCR을 끝냅니다 — 외부 에이전트의 비전
+단계 없이 완성된 마크다운을 과목 폴더에 씁니다. 이건 Alt에 중요한데, Alt 플러그인
+샌드박스는 페이지 이미지를 읽을 수 없어 호스트-비전 엔진은 여기서 무동작이기
+때문입니다. 그래서 PAIDEIA MCP가 OCR을 직접 합니다.
 
-Alt 로컬 사용에서는 MCP 프로세스 안에서 OCR을 온전히 끝내야 할 때 `qwen3-vl`이나
-`tesseract`를 선호하세요. `codex-native`는 Codex 클라이언트가 MCP 호스트이고
-반환된 페이지 이미지를 자체 비전 도구로 읽을 수 있을 때만 사용하세요.
+| 엔진 | 기본값? | 필요 조건 | 필기 품질 | 슬라이드 품질 |
+|---|---|---|---|---|
+| `qwen3-vl` | **예** | `ollama pull qwen3-vl:8b` (~6 GB) | 높음, 오프라인 | 높음, 오프라인 |
+| `tesseract` | 아니오 | `tesseract` + `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata 중 하나 이상 | 낮음 | 중간 |
+
+`qwen3-vl`이 기본값입니다. Ollama가 닿지 않거나 모델이 안 받아졌을 때는 **자동으로
+`tesseract`로 폴백**해 기본 설치로도 결과가 나옵니다. provenance 헤더와 채점 tier에는
+실제로 동작한 엔진이 기록됩니다. 가장 가벼운 무다운로드 경로를 원하면 `tesseract`를
+바로 고르세요.
 
 ---
 
@@ -379,16 +384,21 @@ paideia_mcp/
 ├── workspace.py        안전한 과목 폴더 읽기/쓰기/초기화 + 타입별 산출물 기록기
 ├── exam_radar.py       Exam Radar exam-radar:v1 내보내기 가져오기
 ├── study_tools.py      hwmap/pattern/weakmap 헬퍼
-├── ingest.py           ingest_pdfs 도구 (이중 모드: 래스터화 전용 vs OCR 완료)
-├── grade.py            grade_pdf 도구 (같은 이중 모드)
+├── ingest.py           ingest_pdfs 도구 (렌더 + in-process OCR → converted/**)
+├── grade.py            grade_pdf 도구 (렌더 + in-process OCR → answers/converted/)
 ├── analyze.py          build_course_index 도구
 ├── phase.py            course_phase 도구
 └── ocr/
+    ├── __init__.py      엔진 디스패치 + qwen3-vl→tesseract 폴백
     ├── qwen3vl.py        로컬 Ollama Qwen3-VL 8B
     └── tesseract.py      pytesseract eng 및/또는 kor (설치된 것)
 ```
 
-`openai_vision.py`는 없습니다: `codex-native` 엔진은 MCP 안에서 OCR을 돌리지 않습니다. PDF를 `.paideia-cache/pages/<stem>/p01.png`로 래스터화하고 매니페스트를 반환해, 호출하는 스킬이 Codex CLI의 내장 비전으로 페이지를 읽게 합니다 — ChatGPT Plus/Pro/Business 구독자가 이미 구독으로 비용을 내고 있는 그 비전입니다. `OPENAI_API_KEY`도, 별도 API 과금도 없습니다.
+OCR은 이 두 엔진으로 MCP 프로세스 안에서 전부 처리됩니다 — 호스트-비전
+(`codex-native` / `openai_vision.py`) 경로는 없습니다. Alt 플러그인 샌드박스가
+페이지 이미지를 못 읽어서, OCR을 호스트에 미루는 엔진은 여기서 아무것도 만들지
+못하기 때문입니다. `qwen3-vl`(기본값)은 Ollama가 없으면 `tesseract`로 폴백하므로,
+두 엔진 세트만으로 자족적입니다.
 
 ---
 

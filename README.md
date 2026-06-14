@@ -352,15 +352,20 @@ category searches Alt-native note tools, not connected MCP server tools.
 
 ## Engines
 
-| Engine | Default? | MCP does OCR? | Needs | Quality on handwriting | Quality on slides |
-|---|---|---|---|---|---|
-| `codex-native` | yes | no — skill reads page images via Codex's built-in vision | Codex CLI logged in with ChatGPT Plus/Pro/Business/Edu/Enterprise (no extra API key) | high | high |
-| `qwen3-vl` | no | yes | `ollama pull qwen3-vl:8b` (~6 GB) | high, offline | high, offline |
-| `tesseract` | no | yes | `tesseract` + at least one of `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata | low | medium |
+Both engines OCR **fully in-process** — the MCP writes finished markdown to the
+course folder with no external agent's vision step. This matters for Alt, whose
+plugin sandbox cannot read page images: a host-vision engine would be inert
+here, so PAIDEIA MCP does the OCR itself.
 
-For Alt-local usage, prefer `qwen3-vl` or `tesseract` when you need OCR fully
-inside the MCP process. Use `codex-native` only when a Codex client is the MCP
-host and can read the returned page images with its own vision tool.
+| Engine | Default? | Needs | Quality on handwriting | Quality on slides |
+|---|---|---|---|---|
+| `qwen3-vl` | **yes** | `ollama pull qwen3-vl:8b` (~6 GB) | high, offline | high, offline |
+| `tesseract` | no | `tesseract` + at least one of `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata | low | medium |
+
+`qwen3-vl` is the default. When Ollama is unreachable or the model isn't
+pulled, it **falls back to `tesseract` automatically** so a default install
+still produces output; the provenance header and grade tier record which engine
+actually ran. Pick `tesseract` outright for the lightest, no-download path.
 
 ---
 
@@ -395,16 +400,21 @@ paideia_mcp/
 ├── workspace.py        safe course-folder read/write/init and typed artifact writers
 ├── exam_radar.py       imports Exam Radar exam-radar:v1 exports
 ├── study_tools.py      hwmap/pattern/weakmap helpers
-├── ingest.py           ingest_pdfs tool (dual-mode: rasterize-only vs ocr-complete)
-├── grade.py            grade_pdf tool (same dual-mode)
+├── ingest.py           ingest_pdfs tool (render + in-process OCR → converted/**)
+├── grade.py            grade_pdf tool (render + in-process OCR → answers/converted/)
 ├── analyze.py          build_course_index tool
 ├── phase.py            course_phase tool
 └── ocr/
+    ├── __init__.py      engine dispatch + qwen3-vl→tesseract fallback
     ├── qwen3vl.py        local Ollama Qwen3-VL 8B
     └── tesseract.py      pytesseract eng and/or kor (whichever is installed)
 ```
 
-No `openai_vision.py`: the `codex-native` engine doesn't run OCR inside the MCP. It rasterizes PDFs to `.paideia-cache/pages/<stem>/p01.png` and returns a manifest so the calling skill can read pages with Codex CLI's bundled vision — the same vision ChatGPT Plus/Pro/Business subscribers already pay for via their subscription. No `OPENAI_API_KEY`, no separate API billing.
+OCR runs entirely inside the MCP process via these two engines — there's no
+host-vision (`codex-native` / `openai_vision.py`) path, because Alt's plugin
+sandbox can't read page images, so an engine that defers OCR to the host would
+produce nothing here. `qwen3-vl` (default) falls back to `tesseract` when Ollama
+is unavailable, so the two-engine set is self-sufficient.
 
 ---
 

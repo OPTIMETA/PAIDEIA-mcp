@@ -1,15 +1,10 @@
 """``ingest_pdfs`` MCP tool.
 
-Two modes, picked by the requested engine:
-
-* ``codex-native`` (default) — render every ``materials/**/*.pdf`` to PNGs in
-  ``.paideia-cache/pages/<category>/<relative-path>/p01.png`` and return a
-  *pending* manifest. The calling skill then asks Codex CLI to read those page
-  images directly with its bundled vision and writes the converted markdown
-  itself.
-* ``qwen3-vl`` / ``tesseract`` — render to a scratch directory, OCR in-process
-  via :mod:`paideia_mcp.ocr`, and write ``converted/<category>/<relative>.md``
-  with a provenance header.
+Renders every ``materials/**/*.pdf`` to page PNGs in a scratch directory, OCRs
+each page in-process via :mod:`paideia_mcp.ocr` (``qwen3-vl`` with automatic
+``tesseract`` fallback, or ``tesseract`` directly), and writes
+``converted/<category>/<relative>.md`` with a provenance header recording the
+engine that actually ran.
 
 Additionally, ``materials/**/*.md`` is copied straight through to
 ``converted/**`` with provenance metadata so mixed-source courses work without a
@@ -28,23 +23,21 @@ from pathlib import Path
 from PIL import Image
 from pdf2image import convert_from_path
 
-from .ocr import _IN_PROCESS
+from .ocr import _SUPPORTED
 
 _CATEGORIES = ("lectures", "textbook", "homework", "solutions")
 _DPI = 160
 _MAX_LONG_EDGE = 1800
 _PAGE_SEPARATOR = "\n\n---\n\n"
-_DEFAULT_ENGINE = "codex-native"
-_CACHE_DIRNAME = ".paideia-cache"
+_DEFAULT_ENGINE = "qwen3-vl"
 _COPY_THROUGH_ENGINE = "copy-through"
 
 
 def _default_workers(engine: str) -> int:
     """Pick a conservative worker count per engine."""
 
-    if engine == "codex-native":
-        return max(1, (os.cpu_count() or 4) // 2)
     if engine == "qwen3-vl":
+        # Ollama is GPU-bound; one PDF at a time keeps it from thrashing.
         return 1
     return max(1, (os.cpu_count() or 4) // 2)
 
@@ -87,17 +80,6 @@ def _destination_for(
 
     rel = Path(relative_inside_category)
     return root / "converted" / category / rel.with_suffix(".md")
-
-
-def _cache_dir_for(
-    root: Path,
-    category: str,
-    relative_inside_category: str,
-) -> Path:
-    """Return the per-source raster cache directory."""
-
-    rel = Path(relative_inside_category)
-    return root / _CACHE_DIRNAME / "pages" / category / rel.with_suffix("")
 
 
 def _resize_in_place(png_path: Path) -> None:
@@ -177,8 +159,8 @@ def _copy_markdown_source(task: dict[str, str]) -> dict:
         }
 
 
-def _process_one_pdf_inproc(task: dict) -> dict:
-    """Worker entry point for in-process engines (qwen3-vl / tesseract)."""
+def _process_one_pdf(task: dict) -> dict:
+    """Worker entry point: render a PDF, OCR it in-process, write the markdown."""
 
     from .ocr import run_ocr
 
@@ -193,7 +175,7 @@ def _process_one_pdf_inproc(task: dict) -> dict:
     try:
         page_paths = _render_pdf(pdf_path, scratch_root)
         try:
-            pages_md = run_ocr(
+            pages_md, engine_used = run_ocr(
                 engine,
                 page_paths,
                 project_root=str(root),
@@ -209,7 +191,7 @@ def _process_one_pdf_inproc(task: dict) -> dict:
 
         header = _provenance_header(
             source_rel=source_rel,
-            engine=engine,
+            engine=engine_used,
             pages=len(page_paths),
             ingested_at=ingested_at,
         )
@@ -235,42 +217,18 @@ def _process_one_pdf_inproc(task: dict) -> dict:
         shutil.rmtree(scratch_root, ignore_errors=True)
 
 
-def _process_one_pdf_rasterize(task: dict) -> dict:
-    """Worker entry point for the codex-native engine: rasterize to a cache."""
-
-    pdf_path = Path(task["pdf_path"])
-    destination = Path(task["destination"])
-    source_rel = task["source_rel"]
-    cache_dir = Path(task["cache_dir"])
-
-    try:
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir, ignore_errors=True)
-        page_paths = _render_pdf(pdf_path, cache_dir)
-        return {
-            "status": "pending",
-            "pdf": source_rel,
-            "destination": str(destination),
-            "pages": len(page_paths),
-            "page_paths": [str(p) for p in page_paths],
-        }
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "status": "failed",
-            "pdf": source_rel,
-            "destination": str(destination),
-            "pages": 0,
-            "error": f"{type(exc).__name__}: {exc}",
-        }
-
-
 def ingest_pdfs(
     engine: str = _DEFAULT_ENGINE,
     force: bool = False,
     categories: list[str] | None = None,
     project_root: str | None = None,
 ) -> dict:
-    """Render and/or copy every supported file under ``materials/``."""
+    """Render, OCR, and/or copy every supported file under ``materials/``."""
+
+    if engine not in _SUPPORTED:
+        raise ValueError(
+            f"unknown OCR engine '{engine}'. Supported: {', '.join(_SUPPORTED)}"
+        )
 
     root = Path(project_root or os.getcwd()).resolve()
     sources = _enumerate_materials(root, categories)
@@ -278,13 +236,9 @@ def ingest_pdfs(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
-    is_inproc = engine in _IN_PROCESS
-
     tasks: list[dict] = []
     skipped: list[str] = []
-    pending_categories: dict[str, str] = {}
     converted: list[dict] = []
-    pending: list[dict] = []
     failed: list[dict] = []
     claimed_destinations: dict[str, str] = {}
 
@@ -323,111 +277,57 @@ def ingest_pdfs(
                     }
                 ),
                 converted,
-                pending,
                 failed,
-                pending_categories,
             )
             continue
 
-        if is_inproc:
-            tasks.append(
-                {
-                    "pdf_path": str(source_path),
-                    "category": category,
-                    "destination": str(destination),
-                    "engine": engine,
-                    "source_rel": source_rel,
-                    "root": str(root),
-                    "ingested_at": ingested_at,
-                }
-            )
-            continue
-
-        cache_dir = _cache_dir_for(root, category, relative)
         tasks.append(
             {
                 "pdf_path": str(source_path),
                 "category": category,
                 "destination": str(destination),
+                "engine": engine,
                 "source_rel": source_rel,
-                "cache_dir": str(cache_dir),
+                "root": str(root),
                 "ingested_at": ingested_at,
             }
         )
-        pending_categories[source_rel] = category
 
     if tasks:
-        worker_fn = _process_one_pdf_inproc if is_inproc else _process_one_pdf_rasterize
         workers = max(1, _default_workers(engine))
         workers = min(workers, len(tasks))
         if workers == 1:
             for task in tasks:
-                _collect(
-                    worker_fn(task),
-                    converted,
-                    pending,
-                    failed,
-                    pending_categories,
-                )
+                _collect(_process_one_pdf(task), converted, failed)
         else:
             with ProcessPoolExecutor(max_workers=workers) as pool:
-                futures = [pool.submit(worker_fn, task) for task in tasks]
+                futures = [pool.submit(_process_one_pdf, task) for task in tasks]
                 for fut in as_completed(futures):
-                    _collect(
-                        fut.result(),
-                        converted,
-                        pending,
-                        failed,
-                        pending_categories,
-                    )
+                    _collect(fut.result(), converted, failed)
 
-    if is_inproc:
-        return {
-            "mode": "ocr-complete",
-            "engine": engine,
-            "project_root": str(root),
-            "converted": converted,
-            "skipped": skipped,
-            "failed": failed,
-        }
     return {
-        "mode": "rasterize-only",
+        "mode": "ocr-complete",
         "engine": engine,
         "project_root": str(root),
         "converted": converted,
-        "pending": pending,
         "skipped": skipped,
         "failed": failed,
-        "ingested_at": ingested_at,
     }
 
 
 def _collect(
     result: dict,
     converted: list[dict],
-    pending: list[dict],
     failed: list[dict],
-    pending_categories: dict[str, str],
 ) -> None:
-    """Route a worker result into the converted/pending/failed bucket."""
+    """Route a worker result into the converted or failed bucket."""
 
-    status = result.get("status")
-    if status == "converted":
+    if result.get("status") == "converted":
         converted.append(
             {
                 "path": result["pdf"],
                 "destination": result["destination"],
                 "pages": result["pages"],
-            }
-        )
-    elif status == "pending":
-        pending.append(
-            {
-                "path": result["pdf"],
-                "destination": result["destination"],
-                "pages": result["pages"],
-                "page_paths": result["page_paths"],
-                "category": pending_categories.get(result["pdf"], ""),
             }
         )
     else:

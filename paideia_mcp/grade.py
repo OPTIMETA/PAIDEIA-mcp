@@ -1,17 +1,12 @@
 """``grade_pdf`` MCP tool.
 
-Two modes, picked by engine:
+Renders the answer PDF to page PNGs, OCRs them in-process via
+:mod:`paideia_mcp.ocr` (``qwen3-vl`` with automatic ``tesseract`` fallback, or
+``tesseract`` directly), writes ``answers/converted/<stem>.md`` with a
+provenance + confidence-tier header, and returns the destination path.
 
-* ``codex-native`` (default) — render the answer PDF to PNGs in
-  ``answers/.paideia-cache/<stem>/p01.png`` and return a *pending* payload so
-  the calling skill can read each page image with Codex's bundled vision and
-  write the markdown itself.
-* ``qwen3-vl`` / ``tesseract`` — OCR in-process via :mod:`paideia_mcp.ocr`,
-  write ``answers/converted/<stem>.md`` with provenance + tier header, and
-  return the destination path.
-
-Strategy-grading against the reference solution stays the skill's job either
-way; this tool is strictly the OCR-prep step.
+Strategy-grading against the reference solution stays the skill's job; this
+tool is strictly the OCR-prep step.
 """
 
 from __future__ import annotations
@@ -25,17 +20,15 @@ from pathlib import Path
 from PIL import Image
 from pdf2image import convert_from_path
 
-from .ocr import _IN_PROCESS, run_ocr
+from .ocr import run_ocr
 from .phase import parse_meta
 
 _DPI = 200
 _MAX_LONG_EDGE = 1800
-_DEFAULT_ENGINE = "codex-native"
-_CACHE_DIRNAME = ".paideia-cache"
+_DEFAULT_ENGINE = "qwen3-vl"
 _ARCHIVE_DIRNAME = "_archive"
 
 _TIER_BY_ENGINE = {
-    "codex-native": "high",
     "qwen3-vl": "medium",
     "tesseract": "low",
 }
@@ -49,13 +42,13 @@ def _read_course_meta_engine(root: Path) -> str | None:
     if not value:
         return None
     normalized = value.strip().lower()
-    # Accept legacy aliases from the Claude plugin.
+    # Accept legacy aliases from the Claude/Codex editions. Host-vision engines
+    # (claude/openai/codex) don't OCR inside this MCP, so map them onto the
+    # in-process default — qwen3-vl, which falls back to tesseract on its own.
     if normalized == "ollama":
         return "qwen3-vl"
-    if normalized in {"openai-vision", "claude"}:
-        # Both old aliases now map to codex-native — Codex CLI subscribers
-        # already have vision bundled, so a separate API path is double-billing.
-        return "codex-native"
+    if normalized in {"openai-vision", "claude", "codex-native", "codex"}:
+        return "qwen3-vl"
     if normalized in _TIER_BY_ENGINE:
         return normalized
     return None
@@ -144,32 +137,23 @@ def grade_pdf(
     Args:
         path: Answer PDF path (absolute or relative to ``project_root``).
         engine: Override the OCR engine; defaults to ``.course-meta``
-            ``OCR_ENGINE`` or ``codex-native`` when absent.
+            ``OCR_ENGINE`` or ``qwen3-vl`` when absent.
         project_root: Project root; defaults to ``os.getcwd()``.
 
-    Returns:
-        For ``codex-native``::
-
-            {
-              "mode": "rasterize-only",
-              "engine": "codex-native",
-              "tier": "high",
-              "destination": ".../answers/converted/<stem>.md",
-              "page_paths": [...],
-              "pages": <int>,
-              "source": "...",
-            }
-
-        For ``qwen3-vl`` / ``tesseract``::
+    Returns::
 
             {
               "mode": "ocr-complete",
               "markdown_path": ".../answers/converted/<stem>.md",
-              "tier": "high|medium|low",
-              "engine": "...",
+              "tier": "medium|low",
+              "engine": "qwen3-vl|tesseract",
               "pages_processed": <int>,
               "source": "...",
             }
+
+        ``engine`` reflects the engine that actually ran — a ``qwen3-vl``
+        request comes back as ``tesseract`` (tier ``low``) when Ollama is
+        unavailable.
     """
 
     root = Path(project_root or os.getcwd()).resolve()
@@ -183,7 +167,6 @@ def grade_pdf(
             f"unknown OCR engine '{selected_engine}'. "
             f"Supported: {', '.join(_TIER_BY_ENGINE)}"
         )
-    tier = _TIER_BY_ENGINE[selected_engine]
 
     destination = root / "answers" / "converted" / f"{pdf.stem}.md"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -196,66 +179,47 @@ def grade_pdf(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
-    if selected_engine in _IN_PROCESS:
-        scratch = Path(tempfile.mkdtemp(prefix="paideia-grade-"))
-        try:
-            png_paths = _render_pdf(pdf, scratch)
-            pages_md = run_ocr(
-                selected_engine,
-                png_paths,
-                project_root=str(root),
-            )
-        finally:
-            for child in scratch.glob("*"):
-                try:
-                    child.unlink()
-                except OSError:
-                    pass
+    scratch = Path(tempfile.mkdtemp(prefix="paideia-grade-"))
+    try:
+        png_paths = _render_pdf(pdf, scratch)
+        pages_md, engine_used = run_ocr(
+            selected_engine,
+            png_paths,
+            project_root=str(root),
+        )
+    finally:
+        for child in scratch.glob("*"):
             try:
-                scratch.rmdir()
+                child.unlink()
             except OSError:
                 pass
+        try:
+            scratch.rmdir()
+        except OSError:
+            pass
 
-        header = (
-            "# Vision-OCR transcription\n\n"
-            f"<!-- source: {source_rel} -->\n"
-            f"<!-- engine: {selected_engine} -->\n"
-            f"<!-- tier: {tier} -->\n"
-            f"<!-- pages: {len(png_paths)} -->\n"
-            f"<!-- ingested: {ingested_at} -->\n\n"
-        )
-        body_parts: list[str] = []
-        for i, page_md in enumerate(pages_md, 1):
-            body_parts.append(f"## Page {i}\n\n{(page_md or '').strip()}\n")
-        destination.write_text(header + "\n".join(body_parts), encoding="utf-8")
+    tier = _TIER_BY_ENGINE[engine_used]
+    header = (
+        "# Vision-OCR transcription\n\n"
+        f"<!-- source: {source_rel} -->\n"
+        f"<!-- engine: {engine_used} -->\n"
+        f"<!-- tier: {tier} -->\n"
+        f"<!-- pages: {len(png_paths)} -->\n"
+        f"<!-- ingested: {ingested_at} -->\n\n"
+    )
+    body_parts: list[str] = []
+    for i, page_md in enumerate(pages_md, 1):
+        body_parts.append(f"## Page {i}\n\n{(page_md or '').strip()}\n")
+    destination.write_text(header + "\n".join(body_parts), encoding="utf-8")
 
-        archived_to = _archive_if_under_answers(pdf, root)
-        return {
-            "mode": "ocr-complete",
-            "markdown_path": str(destination),
-            "tier": tier,
-            "engine": selected_engine,
-            "pages_processed": len(png_paths),
-            "source": source_rel,
-            "archived_to": archived_to,
-        }
-
-    # codex-native: rasterize to a stable per-stem cache and hand the page
-    # paths back to the skill.
-    cache_dir = root / "answers" / _CACHE_DIRNAME / pdf.stem
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir, ignore_errors=True)
-    page_paths = _render_pdf(pdf, cache_dir)
     archived_to = _archive_if_under_answers(pdf, root)
     return {
-        "mode": "rasterize-only",
-        "engine": selected_engine,
+        "mode": "ocr-complete",
+        "markdown_path": str(destination),
         "tier": tier,
-        "destination": str(destination),
-        "page_paths": [str(p) for p in page_paths],
-        "pages": len(page_paths),
+        "engine": engine_used,
+        "pages_processed": len(png_paths),
         "source": source_rel,
-        "ingested_at": ingested_at,
         "archived_to": archived_to,
     }
 
