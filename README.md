@@ -1,0 +1,212 @@
+# PAIDEIA MCP
+
+Standalone local MCP server for using PAIDEIA from Alt's local model.
+
+Goal: make the same durable PAIDEIA course folder usable from Alt, not just
+Claude Code / Codex / opencode. Alt captures lectures and runs a local model;
+this MCP server owns the local folder contract, markdown artifact writes,
+Exam Radar imports, repo/skill parsing, and deterministic heavy work.
+
+```
+Alt chat / local model
+        |
+        v
+PAIDEIA MCP (local stdio)
+        |
+        v
+~/courses/my-course/
+  .course-meta
+  materials/ converted/ course-index/ errors/ weakmap/
+  quizzes/ mock/ twins/ chain/ derivations/ cheatsheet/
+```
+
+## Alt Setup
+
+Install dependencies from this folder:
+
+```bash
+python3 -m pip install -e .
+```
+
+In Alt's MCP server dialog, choose the local stdio transport and use:
+
+```text
+Command: python3
+Args: -m paideia_mcp.bootstrap
+Working directory: /absolute/path/to/PAIDEIA-mcp
+```
+
+If Alt asks for a single command string instead of command/args fields:
+
+```bash
+python3 -m paideia_mcp.bootstrap
+```
+
+Transport/auth in Alt:
+
+```text
+Transport: local / stdio
+Auth: none
+Server URL: leave empty for stdio
+```
+
+The bootstrap entrypoint installs missing Python package dependencies into the
+current user's site-packages before importing the MCP server. Set
+`PAIDEIA_MCP_AUTO_INSTALL=0` to disable that behavior and fail with the manual
+`pip install` command instead.
+
+See `examples/alt-local-stdio.json` for a reference snippet. Treat it as a
+field map, not a guaranteed Alt export format.
+
+Before adding it to Alt, you can test the exact stdio path:
+
+```bash
+python3 scripts/smoke_stdio.py
+```
+
+## How Alt Uses It
+
+There are two classes of tools.
+
+### Deterministic tools
+
+These tools write/read PAIDEIA artifacts directly:
+
+| Tool | Purpose |
+|---|---|
+| `init_course` | Create the course folder skeleton, `.course-meta`, `AGENTS.md`, `errors/log.md`, `.gitignore`, and optional git repo. |
+| `ingest_pdfs` | Render/OCR `materials/**/*.pdf` into `converted/**`. |
+| `grade_pdf` | Render/OCR one scanned answer PDF into `answers/converted/<stem>.md`. |
+| `build_course_index` | Draft `course-index/{summary,patterns,coverage}.md` from `converted/**`. |
+| `course_phase` | Return setup/diag/drill/mock/cram/cool, D-day, and top miss. |
+| `import_exam_radar` | Parse Exam Radar's `exam-radar:v1` export and write `course-index/radar.md`, update `coverage.md` annotation, and seed a gold-zone weakmap. |
+| `pattern_lookup` | Filter `course-index/patterns.md` by Pk or keyword. |
+| `hwmap` | Return HW-density exam-priority rows from `coverage.md`. |
+| `generate_weakmap` | Write a compact timestamped weakmap from `errors/log.md`. |
+| `import_alt_note` | Take an Alt active note title/transcript and write durable `materials/lectures/*.md` plus `converted/lectures/*.md`. |
+| `save_action_artifact` | Save model-generated PAIDEIA outputs to canonical paths such as `quizzes/*`, `mock/*`, `derivations/*`, `cheatsheet/final.md`. |
+| `save_course_index` | Save local-model analyze outputs to `course-index/summary.md`, `patterns.md`, and `coverage.md` together. |
+| `save_grade_report` | Save local-model grading feedback under `answers/converted/` and append canonical error-log entries. |
+| `read_artifact` / `write_artifact` / `append_error` | Safe local artifact operations under the course root. |
+| `alt_workflow_guide` | Return the same Alt operating policy as a tool for clients that do not expose MCP prompts. |
+
+### PAIDEIA repo parser / action composer
+
+These tools make all PAIDEIA actions available to Alt's local model:
+
+| Tool | Purpose |
+|---|---|
+| `parse_paideia_repo` | Parse `PAIDEIA`, `PAIDEIA-codex`, or `PAIDEIA-opencode` into the canonical action catalog. |
+| `list_paideia_actions` | List the 16 PAIDEIA actions Alt can perform. |
+| `prepare_paideia_action` | Return the original PAIDEIA instruction, current course context, required artifacts, output hints, and write-tool contract for one action. |
+
+The important pattern is:
+
+1. Alt calls `import_alt_note` for lecture transcripts it wants PAIDEIA to use.
+2. Alt calls `prepare_paideia_action(action="quiz", args="weakmap 5")`.
+3. Alt's local model drafts the PAIDEIA artifact using the returned instruction.
+4. Alt calls `save_action_artifact` to save standard outputs, or `write_artifact`
+   for explicit paths like `course-index/summary.md`.
+   For analyze, Alt calls `save_course_index`; for grading reports with mistakes,
+   Alt calls `save_grade_report`.
+5. If a failed/revised attempt should shape future study, Alt calls `append_error`
+   or includes the errors in `save_grade_report`.
+
+This is how plugin-like PAIDEIA behavior becomes possible without Claude Code:
+MCP supplies the durable local graph and instructions; Alt's local model supplies
+the generation step.
+
+## MCP Prompts
+
+If Alt exposes MCP prompts, the server publishes five ready-to-use operating
+prompts:
+
+```text
+paideia-operating-guide
+paideia-course-bootstrap
+paideia-lecture-to-quiz
+paideia-attempt-first-drill
+paideia-exam-radar-import
+```
+
+If the client only exposes tools, call `alt_workflow_guide` with one of:
+`operating-guide`, `course-bootstrap`, `lecture-to-quiz`,
+`attempt-first-drill`, or `exam-radar-import`.
+
+## Tool Inventory
+
+Current tool discovery should show 22 tools:
+
+```text
+ingest_pdfs
+grade_pdf
+build_course_index
+course_phase
+init_course
+parse_paideia_repo
+list_paideia_actions
+prepare_paideia_action
+list_artifacts
+read_artifact
+write_artifact
+import_alt_note
+save_action_artifact
+save_course_index
+save_grade_report
+append_error
+parse_exam_radar_export
+import_exam_radar
+pattern_lookup
+hwmap
+generate_weakmap
+alt_workflow_guide
+```
+
+## Layout
+
+```
+paideia_mcp/
+├── bootstrap.py        dependency preflight + server launcher
+├── server.py           stdio entrypoint, tool registration
+├── repo_parser.py      parses PAIDEIA skills/prompts into an action catalog
+├── action.py           composes instructions/context for Alt local models
+├── workspace.py        safe course-folder read/write/init and typed artifact writers
+├── exam_radar.py       imports Exam Radar exam-radar:v1 exports
+├── study_tools.py      hwmap/pattern/weakmap helpers
+├── ingest.py           ingest_pdfs tool (dual-mode: rasterize-only vs ocr-complete)
+├── grade.py            grade_pdf tool (same dual-mode)
+├── analyze.py          build_course_index tool
+├── phase.py            course_phase tool
+└── ocr/
+    ├── qwen3vl.py        local Ollama Qwen3-VL 8B
+    └── tesseract.py      pytesseract eng and/or kor (whichever is installed)
+```
+
+No `openai_vision.py`: the `codex-native` engine doesn't run OCR inside the MCP. It rasterizes PDFs to `.paideia-cache/pages/<stem>/p01.png` and returns a manifest so the calling skill can read pages with Codex CLI's bundled vision — the same vision ChatGPT Plus/Pro/Business subscribers already pay for via their subscription. No `OPENAI_API_KEY`, no separate API billing.
+
+## Engines
+
+| Engine | Default? | MCP does OCR? | Needs | Quality on handwriting | Quality on slides |
+|---|---|---|---|---|---|
+| `codex-native` | yes | no — skill reads page images via Codex's built-in vision | Codex CLI logged in with ChatGPT Plus/Pro/Business/Edu/Enterprise (no extra API key) | high | high |
+| `qwen3-vl` | no | yes | `ollama pull qwen3-vl:8b` (~6 GB) | high, offline | high, offline |
+| `tesseract` | no | yes | `tesseract` + at least one of `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata | low | medium |
+
+For Alt-local usage, prefer `qwen3-vl` or `tesseract` when you need OCR fully
+inside the MCP process. Use `codex-native` only when a Codex client is the MCP
+host and can read the returned page images with its own vision tool.
+
+## Notes for Alt Integration
+
+- This MCP server can write markdown files and append YAML logs inside a local
+  PAIDEIA course folder.
+- It does not automatically read Alt's private note database. Alt should pass
+  the active note title/transcript into `import_alt_note`, or expose a separate
+  Alt Notes MCP/tool surface.
+- `import_exam_radar` already accepts the fixed markdown emitted by Exam Radar's
+  copy button.
+- `prepare_paideia_action` plus `save_action_artifact`, `save_course_index`,
+  and `save_grade_report` is the bridge for the rest of PAIDEIA: quiz, twin,
+  blind, chain, mock, derive, cheatsheet, weakmap, analyze, and grade workflows
+  can all be driven by Alt's local model using the returned instructions plus
+  canonical artifact writes.

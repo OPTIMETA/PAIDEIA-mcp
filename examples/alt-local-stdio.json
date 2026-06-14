@@ -1,0 +1,11 @@
+{
+  "name": "PAIDEIA",
+  "transport": "stdio",
+  "command": "python3",
+  "args": ["-m", "paideia_mcp.bootstrap"],
+  "cwd": "/absolute/path/to/PAIDEIA-mcp",
+  "auth": "none",
+  "env": {
+    "PAIDEIA_MCP_AUTO_INSTALL": "1"
+  }
+}
