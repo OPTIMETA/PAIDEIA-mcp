@@ -113,8 +113,12 @@ The important pattern is:
    or includes the errors in `save_grade_report`.
 
 This is how plugin-like PAIDEIA behavior becomes possible without Claude Code:
-MCP supplies the durable local graph and instructions; Alt's local model supplies
-the generation step.
+MCP supplies the durable local graph, action recipes, and instructions; Alt's
+local model supplies the generation step.
+
+For model-first integration, call `alt_capability_manifest` or read
+`paideia://alt/manifest`. It returns a JSON map from every canonical PAIDEIA
+action to the MCP tools and local-model steps needed to execute it.
 
 ## MCP Prompts
 
@@ -133,9 +137,18 @@ If the client only exposes tools, call `alt_workflow_guide` with one of:
 `operating-guide`, `course-bootstrap`, `lecture-to-quiz`,
 `attempt-first-drill`, or `exam-radar-import`.
 
+## MCP Resources
+
+If Alt exposes MCP resources, the server publishes:
+
+```text
+paideia://alt/manifest       JSON action/tool manifest for local-model orchestration
+paideia://alt/system-prompt  default operating prompt for Alt local models
+```
+
 ## Tool Inventory
 
-Current tool discovery should show 22 tools:
+Current tool discovery should show 23 tools:
 
 ```text
 ingest_pdfs
@@ -160,6 +173,7 @@ pattern_lookup
 hwmap
 generate_weakmap
 alt_workflow_guide
+alt_capability_manifest
 ```
 
 ## Layout
@@ -170,6 +184,7 @@ paideia_mcp/
 ├── server.py           stdio entrypoint, tool registration
 ├── repo_parser.py      parses PAIDEIA skills/prompts into an action catalog
 ├── action.py           composes instructions/context for Alt local models
+├── alt_manifest.py     machine-readable Alt action/tool manifest
 ├── workspace.py        safe course-folder read/write/init and typed artifact writers
 ├── exam_radar.py       imports Exam Radar exam-radar:v1 exports
 ├── study_tools.py      hwmap/pattern/weakmap helpers
@@ -205,6 +220,8 @@ host and can read the returned page images with its own vision tool.
   Alt Notes MCP/tool surface.
 - `import_exam_radar` already accepts the fixed markdown emitted by Exam Radar's
   copy button.
+- `alt_capability_manifest` / `paideia://alt/manifest` gives Alt's local model
+  the complete action-to-tool recipe table.
 - `prepare_paideia_action` plus `save_action_artifact`, `save_course_index`,
   and `save_grade_report` is the bridge for the rest of PAIDEIA: quiz, twin,
   blind, chain, mock, derive, cheatsheet, weakmap, analyze, and grade workflows

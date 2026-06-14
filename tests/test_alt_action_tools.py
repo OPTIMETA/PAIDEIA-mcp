@@ -9,10 +9,11 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from paideia_mcp.action import prepare_paideia_action
+from paideia_mcp.alt_manifest import ACTION_RECIPES, build_alt_manifest
 from paideia_mcp.exam_radar import import_exam_radar, parse_exam_radar_export
 from paideia_mcp.prompts import workflow_guide
-from paideia_mcp.repo_parser import parse_paideia_repo
-from paideia_mcp.server import _get_prompt, _list_prompts, _list_tools
+from paideia_mcp.repo_parser import CANONICAL_ACTIONS, parse_paideia_repo
+from paideia_mcp.server import _get_prompt, _list_prompts, _list_resources, _list_tools, _read_resource
 from paideia_mcp.study_tools import generate_weakmap, hwmap, pattern_lookup
 from paideia_mcp.workspace import (
     append_error,
@@ -219,6 +220,39 @@ def test_alt_workflow_guides_are_available_as_tool_and_prompts() -> None:
     tools = asyncio.run(_list_tools())
     tool_names = {t.name for t in tools}
     assert "alt_workflow_guide" in tool_names
+    assert "alt_capability_manifest" in tool_names
+
+
+def test_alt_manifest_covers_every_canonical_action() -> None:
+    manifest = build_alt_manifest(project_root="/tmp/course")
+    action_names = {action["name"] for action in manifest["actions"]}
+
+    assert action_names == set(CANONICAL_ACTIONS)
+    assert set(ACTION_RECIPES) == set(CANONICAL_ACTIONS)
+    assert manifest["action_count"] == 16
+    assert manifest["tools"][-1] == "alt_capability_manifest"
+    for action in manifest["actions"]:
+        steps = action["recipe"]["steps"]
+        assert steps, action["name"]
+        for step in steps:
+            tool = step.get("tool")
+            if tool is not None:
+                assert tool in manifest["tools"], (action["name"], tool)
+
+
+def test_alt_manifest_is_available_as_resource() -> None:
+    resources = asyncio.run(_list_resources())
+    resource_names = {resource.name for resource in resources}
+    assert "paideia-alt-manifest" in resource_names
+    assert "paideia-alt-system-prompt" in resource_names
+
+    manifest_resource = asyncio.run(_read_resource("paideia://alt/manifest"))
+    manifest = json.loads(manifest_resource[0].content)
+    assert manifest["schema"] == "paideia-alt-mcp-manifest:v1"
+    assert manifest["action_count"] == 16
+
+    prompt_resource = asyncio.run(_read_resource("paideia://alt/system-prompt"))
+    assert "You are Alt's local model" in prompt_resource[0].content
 
 
 def test_end_to_end_alt_local_model_workflow(tmp_path: Path) -> None:
@@ -293,6 +327,7 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 assert "prepare_paideia_action" in tool_names
                 assert "save_course_index" in tool_names
                 assert "save_grade_report" in tool_names
+                assert "alt_capability_manifest" in tool_names
 
                 prompts = await session.list_prompts()
                 assert "paideia-operating-guide" in {
@@ -303,6 +338,14 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                     {"project_root": str(course_root)},
                 )
                 assert "Lecture-to-quiz flow" in prompt.messages[0].content.text
+
+                resources = await session.list_resources()
+                assert "paideia-alt-manifest" in {
+                    resource.name for resource in resources.resources
+                }
+                manifest_read = await session.read_resource("paideia://alt/manifest")
+                manifest = json.loads(manifest_read.contents[0].text)
+                assert manifest["action_count"] == 16
 
                 created = await session.call_tool(
                     "init_course",
@@ -327,5 +370,12 @@ def test_stdio_mcp_smoke_exposes_tools_prompts_and_writes(tmp_path: Path) -> Non
                 )
                 saved_json = json.loads(saved.content[0].text)
                 assert "course-index/patterns.md" in saved_json["paths"]
+
+                manifest_tool = await session.call_tool(
+                    "alt_capability_manifest",
+                    {"project_root": str(course_root)},
+                )
+                manifest_tool_json = json.loads(manifest_tool.content[0].text)
+                assert manifest_tool_json["project_root"] == str(course_root)
 
     asyncio.run(run_smoke())

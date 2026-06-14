@@ -28,10 +28,17 @@ async def _run(course_root: Path) -> None:
 
             tools = await session.list_tools()
             prompts = await session.list_prompts()
+            resources = await session.list_resources()
             print(f"tools: {len(tools.tools)}")
             print(", ".join(tool.name for tool in tools.tools))
             print(f"prompts: {len(prompts.prompts)}")
             print(", ".join(prompt.name for prompt in prompts.prompts))
+            print(f"resources: {len(resources.resources)}")
+            print(", ".join(resource.name for resource in resources.resources))
+
+            manifest = await session.read_resource("paideia://alt/manifest")
+            manifest_json = json.loads(manifest.contents[0].text)
+            print(f"manifest actions: {manifest_json['action_count']}")
 
             created = await session.call_tool(
                 "init_course",

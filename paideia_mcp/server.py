@@ -21,10 +21,12 @@ import json
 from typing import Any
 
 from mcp.server import Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.stdio import stdio_server
-from mcp.types import GetPromptResult, Prompt, PromptArgument, PromptMessage, TextContent, Tool
+from mcp.types import GetPromptResult, Prompt, PromptArgument, PromptMessage, Resource, TextContent, Tool
 
 from .action import list_paideia_actions, prepare_paideia_action
+from .alt_manifest import alt_system_prompt, build_alt_manifest
 from .analyze import build_course_index
 from .exam_radar import import_exam_radar, parse_exam_radar_export
 from .grade import grade_pdf
@@ -450,6 +452,16 @@ _ALT_WORKFLOW_GUIDE_SCHEMA: dict[str, Any] = {
 }
 
 
+_ALT_CAPABILITY_MANIFEST_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "project_root": _PROJECT_ROOT_PROP,
+        "repo_root": _REPO_SCHEMA["properties"]["repo_root"],
+    },
+    "additionalProperties": False,
+}
+
+
 @app.list_prompts()
 async def _list_prompts() -> list[Prompt]:
     """Publish Alt-facing prompt templates when the MCP client supports prompts."""
@@ -488,6 +500,51 @@ async def _get_prompt(name: str, arguments: dict[str, str] | None) -> GetPromptR
             )
         ],
     )
+
+
+@app.list_resources()
+async def _list_resources() -> list[Resource]:
+    """Expose machine-readable Alt onboarding resources."""
+
+    return [
+        Resource(
+            name="paideia-alt-manifest",
+            uri="paideia://alt/manifest",
+            description=(
+                "JSON manifest mapping every PAIDEIA action to the MCP tools "
+                "Alt's local model should call."
+            ),
+            mimeType="application/json",
+        ),
+        Resource(
+            name="paideia-alt-system-prompt",
+            uri="paideia://alt/system-prompt",
+            description="Default operating prompt for Alt local models using PAIDEIA MCP.",
+            mimeType="text/plain",
+        ),
+    ]
+
+
+@app.read_resource()
+async def _read_resource(uri: Any) -> list[ReadResourceContents]:
+    """Return one Alt onboarding resource."""
+
+    value = str(uri).rstrip("/")
+    if value == "paideia://alt/manifest":
+        return [
+            ReadResourceContents(
+                content=json.dumps(build_alt_manifest(), ensure_ascii=False, indent=2),
+                mime_type="application/json",
+            )
+        ]
+    if value == "paideia://alt/system-prompt":
+        return [
+            ReadResourceContents(
+                content=alt_system_prompt(),
+                mime_type="text/plain",
+            )
+        ]
+    raise FileNotFoundError(f"unknown resource: {uri}")
 
 
 @app.list_tools()
@@ -635,6 +692,14 @@ async def _list_tools() -> list[Tool]:
             ),
             inputSchema=_ALT_WORKFLOW_GUIDE_SCHEMA,
         ),
+        Tool(
+            name="alt_capability_manifest",
+            description=(
+                "Return the machine-readable Alt manifest: setup, SDK boundary, "
+                "PAIDEIA rules, and action-to-tool recipes for all 16 actions."
+            ),
+            inputSchema=_ALT_CAPABILITY_MANIFEST_SCHEMA,
+        ),
     ]
 
 
@@ -661,6 +726,7 @@ _DISPATCH = {
     "hwmap": hwmap,
     "generate_weakmap": generate_weakmap,
     "alt_workflow_guide": workflow_guide,
+    "alt_capability_manifest": build_alt_manifest,
 }
 
 
