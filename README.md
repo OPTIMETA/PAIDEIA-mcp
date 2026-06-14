@@ -32,6 +32,8 @@
 </p>
 
 <p align="center">
+  <a href="./README.ko.md">한국어 README</a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/OPTIMETA/PAIDEIA"><strong>PAIDEIA</strong> — original Claude Code edition</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
