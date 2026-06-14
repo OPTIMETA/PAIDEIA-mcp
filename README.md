@@ -40,13 +40,35 @@ python -m pip install -e .
 In Alt's MCP server dialog, choose the local stdio transport and use:
 
 ```text
-Command: python3
-Args: -m paideia_mcp.bootstrap
-Working directory: /absolute/path/to/PAIDEIA-mcp
+명령어: /absolute/path/to/PAIDEIA-mcp/.venv/bin/python
+전송 방식: 로컬 (stdio)
+인수:
+  -m
+  paideia_mcp.bootstrap
+글로벌 채팅에서 사용: on
+이름: PAIDEIA
+작업 디렉터리: /absolute/path/to/PAIDEIA-mcp
+환경 변수:
+  PAIDEIA_MCP_AUTO_INSTALL = 0
 ```
 
-If you installed into `.venv`, set `Command` to
-`/absolute/path/to/PAIDEIA-mcp/.venv/bin/python` and keep the same args.
+Important: the `인수` box takes one argument per line. Do not put
+`python3 -m paideia_mcp.bootstrap` all in the `명령어` field.
+
+If you did not create `.venv`, use this lighter setup instead:
+
+```text
+명령어: python3
+전송 방식: 로컬 (stdio)
+인수:
+  -m
+  paideia_mcp.bootstrap
+글로벌 채팅에서 사용: on
+이름: PAIDEIA
+작업 디렉터리: /absolute/path/to/PAIDEIA-mcp
+환경 변수:
+  PAIDEIA_MCP_AUTO_INSTALL = 1
+```
 
 If Alt asks for a single command string instead of command/args fields:
 
@@ -132,6 +154,14 @@ These tools make all PAIDEIA actions available to Alt's local model:
 | `parse_paideia_repo` | Parse `PAIDEIA`, `PAIDEIA-codex`, or `PAIDEIA-opencode` into the canonical action catalog. |
 | `list_paideia_actions` | List the 16 PAIDEIA actions Alt can perform. |
 | `prepare_paideia_action` | Return the original PAIDEIA instruction, current course context, required artifacts, output hints, and write-tool contract for one action. |
+
+The parser understands the source formats used across OPTIMETA's PAIDEIA line:
+Codex skill folders (`plugins/paideia/skills/paideia-*/SKILL.md`), Claude
+command markdown (`plugins/paideia/commands/*.md`), PAIDEIA-Hermes command
+markdown (`commands/*.md`) plus mapped Hermes skills, and opencode prompt files
+(`assets/prompts/*.md`). Canonical PAIDEIA actions are normalized to the same
+16-action surface; source-only helpers such as `doctor` are preserved as
+`extra_actions` in the manifest/catalog.
 
 The important pattern is:
 

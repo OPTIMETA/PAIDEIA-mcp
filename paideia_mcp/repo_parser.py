@@ -79,6 +79,16 @@ ACTION_REQUIRED_ARTIFACTS: dict[str, list[str]] = {
 }
 
 
+SKILL_ACTION_MAP: dict[str, str] = {
+    "alt-import": "alt",
+    "answer-processing": "grade",
+    "course-builder": "analyze",
+    "exam-drill": "quiz",
+    "pdf": "ingest",
+    "vision-ocr": "ingest",
+}
+
+
 @dataclass(frozen=True)
 class PaideiaAction:
     """One PAIDEIA action parsed from a repo or built-in fallback."""
@@ -143,6 +153,39 @@ def _action_from_skill_dir(path: Path, source: str) -> PaideiaAction | None:
     )
 
 
+def _action_from_command_file(path: Path, source: str) -> PaideiaAction:
+    """Parse one PAIDEIA slash-command markdown file."""
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    meta, body = _strip_frontmatter(text)
+    name = path.stem
+    description = meta.get("description") or CANONICAL_ACTIONS.get(name, "")
+    if not description:
+        title = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
+        description = title.group(1).strip() if title else f"PAIDEIA command: {name}"
+    return PaideiaAction(
+        name=name,
+        description=description,
+        source=source,
+        instruction_path=str(path),
+        instruction=body,
+        required_artifacts=ACTION_REQUIRED_ARTIFACTS.get(name, []),
+        output_hints=ACTION_OUTPUT_HINTS.get(name, []),
+    )
+
+
+def _parse_command_dir(base: Path, source: str) -> list[PaideiaAction]:
+    """Parse canonical command markdown files from a PAIDEIA command dir."""
+
+    if not base.exists():
+        return []
+    return [
+        _action_from_command_file(path, source)
+        for path in sorted(base.glob("*.md"))
+        if not path.name.startswith("_")
+    ]
+
+
 def _parse_codex_repo(root: Path) -> list[PaideiaAction]:
     base = root / "plugins" / "paideia" / "skills"
     if not base.exists():
@@ -158,24 +201,20 @@ def _parse_codex_repo(root: Path) -> list[PaideiaAction]:
 
 
 def _parse_claude_repo(root: Path) -> list[PaideiaAction]:
+    command_actions = _parse_command_dir(
+        root / "plugins" / "paideia" / "commands",
+        "claude-command",
+    )
     base = root / "plugins" / "paideia" / "skills"
     if not base.exists():
-        return []
-    mapped = {
-        "alt-import": "alt",
-        "answer-processing": "grade",
-        "course-builder": "analyze",
-        "exam-drill": "quiz",
-        "pdf": "ingest",
-        "vision-ocr": "ingest",
-    }
+        return command_actions
     actions: list[PaideiaAction] = []
     for path in sorted(base.iterdir()):
         if not path.is_dir():
             continue
         action = _action_from_skill_dir(path, "claude-skill")
         if action:
-            name = mapped.get(action.name, action.name)
+            name = SKILL_ACTION_MAP.get(action.name, action.name)
             actions.append(
                 PaideiaAction(
                     name=name,
@@ -187,7 +226,35 @@ def _parse_claude_repo(root: Path) -> list[PaideiaAction]:
                     output_hints=ACTION_OUTPUT_HINTS.get(name, []),
                 )
             )
-    return actions
+    return command_actions + actions
+
+
+def _parse_hermes_repo(root: Path) -> list[PaideiaAction]:
+    """Parse PAIDEIA-Hermes commands and mapped skill folders."""
+
+    command_actions = _parse_command_dir(root / "commands", "hermes-command")
+    base = root / "skills"
+    if not base.exists():
+        return command_actions
+    actions: list[PaideiaAction] = []
+    for path in sorted(base.iterdir()):
+        if not path.is_dir():
+            continue
+        action = _action_from_skill_dir(path, "hermes-skill")
+        if action:
+            name = SKILL_ACTION_MAP.get(action.name, action.name)
+            actions.append(
+                PaideiaAction(
+                    name=name,
+                    description=action.description or CANONICAL_ACTIONS.get(name, ""),
+                    source=action.source,
+                    instruction_path=action.instruction_path,
+                    instruction=action.instruction,
+                    required_artifacts=ACTION_REQUIRED_ARTIFACTS.get(name, []),
+                    output_hints=ACTION_OUTPUT_HINTS.get(name, []),
+                )
+            )
+    return command_actions + actions
 
 
 def _parse_opencode_repo(root: Path) -> list[PaideiaAction]:
@@ -228,9 +295,11 @@ def _default_repo_candidates() -> list[Path]:
                 parent / "PAIDEIA-codex",
                 parent / "PAIDEIA",
                 parent / "PAIDEIA-opencode",
+                parent / "PAIDEIA-Hermes",
                 parent / "optimeta" / "PAIDEIA-codex",
                 parent / "optimeta" / "PAIDEIA",
                 parent / "optimeta" / "PAIDEIA-opencode",
+                parent / "optimeta" / "PAIDEIA-Hermes",
             ]
         )
     return candidates
@@ -269,7 +338,12 @@ def parse_paideia_repo(repo_root: str | None = None) -> dict[str, Any]:
         if not root.exists() or str(root) in seen:
             continue
         seen.add(str(root))
-        parsed = _parse_codex_repo(root) or _parse_claude_repo(root) or _parse_opencode_repo(root)
+        parsed = (
+            _parse_codex_repo(root)
+            or _parse_claude_repo(root)
+            or _parse_hermes_repo(root)
+            or _parse_opencode_repo(root)
+        )
         if parsed:
             used_root = root
             actions = parsed
@@ -280,16 +354,23 @@ def parse_paideia_repo(repo_root: str | None = None) -> dict[str, Any]:
 
     by_name: dict[str, PaideiaAction] = {}
     for action in actions:
-        by_name[action.name] = action
+        by_name.setdefault(action.name, action)
     # Ensure every canonical action exists even when the source repo is sparse.
     for fallback in _fallback_actions():
         by_name.setdefault(fallback.name, fallback)
 
     ordered = [by_name[name] for name in CANONICAL_ACTIONS if name in by_name]
+    extras = [
+        action
+        for name, action in sorted(by_name.items())
+        if name not in CANONICAL_ACTIONS
+    ]
     return {
         "repo_root": str(used_root) if used_root else None,
         "actions": [a.to_dict(include_instruction=False) for a in ordered],
         "count": len(ordered),
+        "extra_actions": [a.to_dict(include_instruction=False) for a in extras],
+        "extra_count": len(extras),
     }
 
 
@@ -298,7 +379,7 @@ def get_action(name: str, repo_root: str | None = None) -> PaideiaAction:
 
     catalog = parse_paideia_repo(repo_root)
     wanted = name.removeprefix("paideia-")
-    for item in catalog["actions"]:
+    for item in [*catalog["actions"], *catalog.get("extra_actions", [])]:
         if item["name"] == wanted:
             if item["instruction_path"]:
                 path = Path(item["instruction_path"])
@@ -316,4 +397,3 @@ def get_action(name: str, repo_root: str | None = None) -> PaideiaAction:
             fallback = next(a for a in _fallback_actions() if a.name == wanted)
             return fallback
     raise KeyError(f"unknown PAIDEIA action: {name}")
-

@@ -207,7 +207,7 @@ def build_alt_manifest(
         "alt_sdk_boundary": {
             "sdk_import": "import { alt } from 'alt-plugin-sdk'",
             "notes_source": "Alt can read notes with alt.notes.*; this MCP server cannot read Alt's private database directly.",
-            "bridge": "Pass active note title/transcript/memo/summary into import_alt_note.",
+            "bridge": "Pass selected note title/transcript/memo/summary payloads into bootstrap_alt_course, import_alt_notes, or import_alt_note.",
             "filesystem": "Durable local markdown writes happen through this MCP server, not through the Alt plugin sandbox.",
         },
         "paideia_rules": [
@@ -220,8 +220,10 @@ def build_alt_manifest(
         "tools": MCP_TOOLS,
         "prompts": [spec["name"] for spec in list_prompt_specs()],
         "actions": actions,
+        "extra_actions": catalog.get("extra_actions", []),
         "action_count": len(actions),
         "canonical_action_count": len(CANONICAL_ACTIONS),
+        "extra_action_count": catalog.get("extra_count", 0),
     }
 
 

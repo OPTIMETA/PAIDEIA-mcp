@@ -13,7 +13,7 @@ from paideia_mcp.alt_manifest import ACTION_RECIPES, build_alt_manifest
 from paideia_mcp.doctor import paideia_doctor
 from paideia_mcp.exam_radar import import_exam_radar, parse_exam_radar_export
 from paideia_mcp.prompts import workflow_guide
-from paideia_mcp.repo_parser import CANONICAL_ACTIONS, parse_paideia_repo
+from paideia_mcp.repo_parser import CANONICAL_ACTIONS, get_action, parse_paideia_repo
 from paideia_mcp.server import _get_prompt, _list_prompts, _list_resources, _list_tools, _read_resource
 from paideia_mcp.study_tools import generate_weakmap, hwmap, pattern_lookup
 from paideia_mcp.workspace import (
@@ -36,6 +36,56 @@ def test_parse_nearby_paideia_repo_exposes_canonical_actions() -> None:
     names = {a["name"] for a in catalog["actions"]}
     assert {"init-course", "ingest", "analyze", "quiz", "grade", "alt"} <= names
     assert catalog["count"] >= 16
+
+
+def test_repo_parser_handles_claude_command_repos_and_extras(tmp_path: Path) -> None:
+    root = tmp_path / "PAIDEIA"
+    commands = root / "plugins" / "paideia" / "commands"
+    commands.mkdir(parents=True)
+    (commands / "quiz.md").write_text(
+        "---\n"
+        "description: Generate practice problems from command markdown.\n"
+        "---\n\n"
+        "Quiz command body.\n",
+        encoding="utf-8",
+    )
+    (commands / "doctor.md").write_text(
+        "---\n"
+        "description: Diagnose the command install.\n"
+        "---\n\n"
+        "Doctor command body.\n",
+        encoding="utf-8",
+    )
+
+    catalog = parse_paideia_repo(str(root))
+    quiz = next(action for action in catalog["actions"] if action["name"] == "quiz")
+    extras = {action["name"]: action for action in catalog["extra_actions"]}
+
+    assert quiz["source"] == "claude-command"
+    assert "Generate practice" in quiz["description"]
+    assert "doctor" in extras
+    assert extras["doctor"]["source"] == "claude-command"
+    assert get_action("doctor", str(root)).instruction.strip() == "Doctor command body."
+
+
+def test_repo_parser_handles_hermes_command_repos(tmp_path: Path) -> None:
+    root = tmp_path / "PAIDEIA-Hermes"
+    commands = root / "commands"
+    commands.mkdir(parents=True)
+    (commands / "quiz.md").write_text(
+        "---\n"
+        "description: Hermes quiz command.\n"
+        "---\n\n"
+        "Hermes quiz body.\n",
+        encoding="utf-8",
+    )
+
+    catalog = parse_paideia_repo(str(root))
+    quiz = next(action for action in catalog["actions"] if action["name"] == "quiz")
+
+    assert quiz["source"] == "hermes-command"
+    assert "Hermes quiz command" in quiz["description"]
+    assert get_action("quiz", str(root)).instruction.strip() == "Hermes quiz body."
 
 
 def test_workspace_can_init_write_read_and_append_error(tmp_path: Path) -> None:
