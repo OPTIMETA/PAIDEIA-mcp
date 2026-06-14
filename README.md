@@ -1,11 +1,82 @@
-# PAIDEIA MCP
+<h1 align="center">ΠΑΙΔΕΙΑ · Paideia <sub>(MCP server for Alt)</sub></h1>
 
-Standalone local MCP server for using PAIDEIA from Alt's local model.
+<p align="center">
+  <strong>Your course. Your patterns. Your errors. Your cheatsheet.</strong><br>
+  <em>A standalone local MCP server that brings the same permanent, editable, per-course study graph to Alt's local model — every artifact shaped by you, not by a generic syllabus. The MCP edition: the integration layer that lets PAIDEIA run from <a href="https://www.altalt.io/ko/">Alt</a>, not just from an agentic CLI.</em>
+</p>
 
-Goal: make the same durable PAIDEIA course folder usable from Alt, not just
-Claude Code / Codex / opencode. Alt captures lectures and runs a local model;
-this MCP server owns the local folder contract, markdown artifact writes,
-Exam Radar imports, repo/skill parsing, and deterministic heavy work.
+<p align="center">
+  <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><img height="30" src="https://img.shields.io/badge/Exam_Radar-OPTIMETA_Alt_plugin-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Exam Radar — OPTIMETA Alt plugin"></a>
+</p>
+
+<p align="center">
+  <sub><em>Capture lectures with <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><strong>Exam Radar</strong></a> — OPTIMETA's Alt plugin — and study them with Paideia. This MCP server is the bridge that closes the loop inside Alt itself: import an Alt note batch, then pipe a roadmap straight in with <code>import_exam_radar</code>.</em></sub>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/license/OPTIMETA/PAIDEIA-mcp?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="License">
+  <img src="https://img.shields.io/github/stars/OPTIMETA/PAIDEIA-mcp?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub stars">
+  <img src="https://img.shields.io/github/last-commit/OPTIMETA/PAIDEIA-mcp?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Last commit">
+  <img src="https://img.shields.io/github/languages/top/OPTIMETA/PAIDEIA-mcp?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Top language">
+  &nbsp;
+  <img src="https://img.shields.io/badge/MCP-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="MCP">
+  <img src="https://img.shields.io/badge/Alt-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="Alt">
+  <img src="https://img.shields.io/badge/Markdown-000000?style=flat-square&logo=markdown&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Markdown">
+  <img src="https://img.shields.io/badge/Python-000000?style=flat-square&logo=python&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Python">
+  <img src="https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Ollama">
+  <img src="https://img.shields.io/badge/Qwen3--VL-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="Qwen3-VL">
+  <img src="https://img.shields.io/badge/Tesseract-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="Tesseract">
+  &nbsp;
+  <img src="https://img.shields.io/badge/LaTeX-000000?style=flat-square&logo=latex&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="LaTeX">
+  <img src="https://img.shields.io/badge/Obsidian-000000?style=flat-square&logo=obsidian&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Obsidian">
+</p>
+
+<p align="center">
+  <a href="https://github.com/OPTIMETA/PAIDEIA"><strong>PAIDEIA</strong> — original Claude Code edition</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/OPTIMETA/PAIDEIA-opencode"><strong>PAIDEIA-opencode</strong> — opencode edition</a>
+  &nbsp;·&nbsp;
+  <a href="https://taewoopark.com"><strong>taewoopark.com</strong> — author site</a>
+</p>
+
+<p align="center">
+  <sub>The Alt / MCP integration layer for the PAIDEIA study graph — same on-disk layout, same license, portable across every edition.</sub>
+</p>
+
+> **Using Alt instead of Claude Code, Codex, or opencode?** Same tool, same on-disk layout, same license — re-homed as a **local MCP server**. The original PAIDEIA is a Claude Code *plugin*; this edition is a self-contained stdio MCP server that owns the local folder contract, markdown artifact writes, Exam Radar imports, repo/skill parsing, and the deterministic heavy work, so Alt's local model can drive the same study graph. The graph it builds is byte-for-byte identical and portable across all editions.
+
+> **Security notice.** PAIDEIA MCP installs as a local stdio MCP server — a `pip install -e .` Python package you point Alt at — and never asks you to download a `.zip`, run an `.exe`, or use any installer. Any other repository using the PAIDEIA name is not affiliated with this project unless it is explicitly linked from this README.
+
+<p align="center">
+  <em>Generic study tools teach you the average syllabus. Paideia teaches you <strong>your</strong> syllabus —<br>
+  from your professor's notes, your HW emphases, your handwriting, your errors. Every artifact is a markdown file you can edit.</em>
+</p>
+
+---
+
+## What Paideia means
+
+In ancient Greece, **Παιδεία** was never the deposit of facts into a passive student. It was the lifelong formation of a complete human being — through structured encounter with primary texts, guided practice under a master, and reflective dialogue that folds feedback into deeper revision.
+
+This MCP server implements that cycle for the specific, bounded problem of **exam preparation** in math, physics, and engineering courses:
+
+```
+  ingest ──▶ analyze ──▶ drill ──▶ grade ──▶ weakmap ──▶ cheatsheet
+     ▲                                                        │
+     └────────────────── feedback loop ───────────────────────┘
+```
+
+Every stage produces a markdown artifact that lives in your course folder forever. Nothing is ephemeral. Nothing is hidden behind an API. Nothing stops working when the next funding winter hits.
+
+---
+
+## Why an MCP edition
+
+PAIDEIA was born as a Claude Code plugin. The heavy lifting — parallel vision ingest, strategy grading, pattern extraction from *your* solutions — never depended on Claude specifically; it depended on *any* host that can run instructions against a course folder. Alt captures lectures and runs a local model, but it is not an agentic CLI with skills and subagents. So instead of porting the verbs, this edition re-homes the deterministic core into a **standalone local stdio MCP server**.
+
+Goal: make the same durable PAIDEIA course folder usable from Alt, not just Claude Code / Codex / opencode. The server owns the local folder contract, markdown artifact writes, Exam Radar imports, repo/skill parsing, and deterministic heavy work; Alt's local model supplies the generation step.
 
 ```
 Alt chat / local model
@@ -19,6 +90,10 @@ PAIDEIA MCP (local stdio)
   materials/ converted/ course-index/ errors/ weakmap/
   quizzes/ mock/ twins/ chain/ derivations/ cheatsheet/
 ```
+
+The study graph on disk is **byte-for-byte the same** as every other edition. `course-index/patterns.md`, `errors/log.md`, `weakmap/weakmap_<ts>.md`, `cheatsheet/final.md` — all the artifacts the Claude edition writes, this edition also writes, in the same format. Fork a course folder between editions and the new runner picks up without friction.
+
+---
 
 ## Alt Setup
 
@@ -124,6 +199,8 @@ MCP client API. The intended bridge is:
 
 See `examples/alt-sdk-note-handoff.ts` for the SDK-side payload shape.
 
+---
+
 ## How Alt Uses It
 
 There are two classes of tools.
@@ -192,6 +269,8 @@ For model-first integration, call `alt_capability_manifest` or read
 `paideia://alt/manifest`. It returns a JSON map from every canonical PAIDEIA
 action to the MCP tools and local-model steps needed to execute it.
 
+---
+
 ## MCP Prompts
 
 If Alt exposes MCP prompts, the server publishes five ready-to-use operating
@@ -209,6 +288,8 @@ If the client only exposes tools, call `alt_workflow_guide` with one of:
 `operating-guide`, `course-bootstrap`, `lecture-to-quiz`,
 `attempt-first-drill`, or `exam-radar-import`.
 
+---
+
 ## MCP Resources
 
 If Alt exposes MCP resources, the server publishes:
@@ -217,6 +298,8 @@ If Alt exposes MCP resources, the server publishes:
 paideia://alt/manifest       JSON action/tool manifest for local-model orchestration
 paideia://alt/system-prompt  default operating prompt for Alt local models
 ```
+
+---
 
 ## Tool Inventory
 
@@ -263,7 +346,42 @@ In Alt chat, call PAIDEIA MCP tools directly by name. Do not use
 `alt_tool_search_bm25` with `category: "alt"` to find PAIDEIA tools; that
 category searches Alt-native note tools, not connected MCP server tools.
 
-## Layout
+---
+
+## Engines
+
+| Engine | Default? | MCP does OCR? | Needs | Quality on handwriting | Quality on slides |
+|---|---|---|---|---|---|
+| `codex-native` | yes | no — skill reads page images via Codex's built-in vision | Codex CLI logged in with ChatGPT Plus/Pro/Business/Edu/Enterprise (no extra API key) | high | high |
+| `qwen3-vl` | no | yes | `ollama pull qwen3-vl:8b` (~6 GB) | high, offline | high, offline |
+| `tesseract` | no | yes | `tesseract` + at least one of `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata | low | medium |
+
+For Alt-local usage, prefer `qwen3-vl` or `tesseract` when you need OCR fully
+inside the MCP process. Use `codex-native` only when a Codex client is the MCP
+host and can read the returned page images with its own vision tool.
+
+---
+
+## Notes for Alt Integration
+
+- This MCP server can write markdown files and append YAML logs inside a local
+  PAIDEIA course folder.
+- It does not automatically read Alt's private note database. Alt should pass
+  active/selected note title/transcript/memo/summary payloads into
+  `bootstrap_alt_course`, `import_alt_notes`, or `import_alt_note`.
+- `import_exam_radar` already accepts the fixed markdown emitted by Exam Radar's
+  copy button.
+- `alt_capability_manifest` / `paideia://alt/manifest` gives Alt's local model
+  the complete action-to-tool recipe table.
+- `prepare_paideia_action` plus `save_action_artifact`, `save_course_index`,
+  and `save_grade_report` is the bridge for the rest of PAIDEIA: quiz, twin,
+  blind, chain, mock, derive, cheatsheet, weakmap, analyze, and grade workflows
+  can all be driven by Alt's local model using the returned instructions plus
+  canonical artifact writes.
+
+---
+
+## What ships
 
 ```
 paideia_mcp/
@@ -286,31 +404,27 @@ paideia_mcp/
 
 No `openai_vision.py`: the `codex-native` engine doesn't run OCR inside the MCP. It rasterizes PDFs to `.paideia-cache/pages/<stem>/p01.png` and returns a manifest so the calling skill can read pages with Codex CLI's bundled vision — the same vision ChatGPT Plus/Pro/Business subscribers already pay for via their subscription. No `OPENAI_API_KEY`, no separate API billing.
 
-## Engines
+---
 
-| Engine | Default? | MCP does OCR? | Needs | Quality on handwriting | Quality on slides |
-|---|---|---|---|---|---|
-| `codex-native` | yes | no — skill reads page images via Codex's built-in vision | Codex CLI logged in with ChatGPT Plus/Pro/Business/Edu/Enterprise (no extra API key) | high | high |
-| `qwen3-vl` | no | yes | `ollama pull qwen3-vl:8b` (~6 GB) | high, offline | high, offline |
-| `tesseract` | no | yes | `tesseract` + at least one of `tesseract-ocr-eng` / `tesseract-ocr-kor` traineddata | low | medium |
+## Connect
 
-For Alt-local usage, prefer `qwen3-vl` or `tesseract` when you need OCR fully
-inside the MCP process. Use `codex-native` only when a Codex client is the MCP
-host and can read the returned page images with its own vision tool.
+<p align="center">
+  <a href="https://github.com/TaewoooPark"><img src="https://img.shields.io/badge/-GitHub-181717?style=for-the-badge&logo=github&logoColor=white&cacheSeconds=3600" alt="GitHub"></a>
+  <a href="https://x.com/theoverstrcture"><img src="https://img.shields.io/badge/-X-000000?style=for-the-badge&logo=x&logoColor=white&cacheSeconds=3600" alt="X (Twitter)"></a>
+  <a href="https://www.linkedin.com/in/taewoo-park-427a05352"><img src="https://img.shields.io/badge/-LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white&cacheSeconds=3600" alt="LinkedIn"></a>
+  <a href="https://www.instagram.com/t.wo0_x/"><img src="https://img.shields.io/badge/-Instagram-E4405F?style=for-the-badge&logo=instagram&logoColor=white&cacheSeconds=3600" alt="Instagram"></a>
+  <a href="https://taewoopark.com"><img src="https://img.shields.io/badge/-taewoopark.com-000000?style=for-the-badge&logo=safari&logoColor=white&cacheSeconds=3600" alt="Personal site"></a>
+  <a href="mailto:ptw151125@kaist.ac.kr"><img src="https://img.shields.io/badge/-Email-D14836?style=for-the-badge&logo=gmail&logoColor=white&cacheSeconds=3600" alt="Email"></a>
+</p>
 
-## Notes for Alt Integration
+---
 
-- This MCP server can write markdown files and append YAML logs inside a local
-  PAIDEIA course folder.
-- It does not automatically read Alt's private note database. Alt should pass
-  active/selected note title/transcript/memo/summary payloads into
-  `bootstrap_alt_course`, `import_alt_notes`, or `import_alt_note`.
-- `import_exam_radar` already accepts the fixed markdown emitted by Exam Radar's
-  copy button.
-- `alt_capability_manifest` / `paideia://alt/manifest` gives Alt's local model
-  the complete action-to-tool recipe table.
-- `prepare_paideia_action` plus `save_action_artifact`, `save_course_index`,
-  and `save_grade_report` is the bridge for the rest of PAIDEIA: quiz, twin,
-  blind, chain, mock, derive, cheatsheet, weakmap, analyze, and grade workflows
-  can all be driven by Alt's local model using the returned instructions plus
-  canonical artifact writes.
+## License
+
+MIT. Use freely. Fork and modify for your own courses — the point of PAIDEIA is that the study graph it builds is yours to shape, not a fixed product you have to live with.
+
+---
+
+<p align="center">
+  <em>Generic curricula teach the average student. Παιδεία — formation, one student at a time.</em>
+</p>
